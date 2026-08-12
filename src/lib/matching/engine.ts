@@ -62,6 +62,15 @@ export type Match = {
   hobbyOnly: boolean;
 };
 
+/** "Entrepreneur" as an area of expertise says nothing meaningful, so we never
+ * phrase it as a shared field or a role descriptor. */
+const VAGUE_EXPERTISE = ["entrepreneur", "entrepreneurship", "founder", "business owner"];
+
+function meaningfulExpertise(value: string | null) {
+  if (!value) return null;
+  return VAGUE_EXPERTISE.includes(value.trim().toLowerCase()) ? null : value;
+}
+
 function jaccard(a: string[], b: string[]) {
   const setA = new Set(a);
   const setB = new Set(b);
@@ -206,7 +215,8 @@ export function scoreCandidate(
   if (!options.hobbyOnly && seeker.expertise && candidate.expertise) {
     const same = seeker.expertise === candidate.expertise ? 1 : 0;
     parts.push({ dimension: "expertise", score: same });
-    if (same) reasons.push(`You both work in ${candidate.expertise}`);
+    const shownExpertise = meaningfulExpertise(candidate.expertise);
+    if (same && shownExpertise) reasons.push(`You both work in ${shownExpertise}`);
   }
 
   const life = jaccard(seeker.lifeContext, candidate.lifeContext);
@@ -257,7 +267,7 @@ function listOf(items: string[]) {
 function headlineFor(seeker: Seeker, candidate: Candidate) {
   const first = candidate.name.trim().split(/\s+/)[0] ?? "She";
   const bits: string[] = [];
-  const role = roleDescriptor(candidate.roleLabel, candidate.expertise);
+  const role = roleDescriptor(candidate.roleLabel, meaningfulExpertise(candidate.expertise));
   if (role) bits.push(role);
   if (seeker.age !== null && candidate.age !== null) {
     const gap = Math.abs(seeker.age - candidate.age);
