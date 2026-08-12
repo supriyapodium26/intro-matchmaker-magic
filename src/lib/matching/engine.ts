@@ -217,15 +217,20 @@ export function scoreCandidate(
     reasons.push(`You've both lived in ${countries.shared.slice(0, 2).join(", ")}`);
   }
 
-  const totalWeight = parts.reduce((sum, part) => sum + WEIGHTS[part.dimension], 0);
-  const weighted = parts.reduce((sum, part) => sum + part.score * WEIGHTS[part.dimension], 0);
+  // Route B members carry no stage/business-type answers, so they are scored on
+  // the fallback weight table instead of having the stage weight redistributed.
+  const table: Record<Dimension, number> =
+    stage === null ? { ...ROUTE_B_WEIGHTS } : { ...WEIGHTS };
+
+  const totalWeight = parts.reduce((sum, part) => sum + table[part.dimension], 0);
+  const weighted = parts.reduce((sum, part) => sum + part.score * table[part.dimension], 0);
   const score = totalWeight === 0 ? 0 : Math.round((weighted / totalWeight) * 100);
 
   const breakdown: MatchBreakdown[] = parts.map((part) => ({
     dimension: part.dimension,
     label: DIMENSION_LABELS[part.dimension],
     score: Number(part.score.toFixed(2)),
-    weight: Math.round((WEIGHTS[part.dimension] / totalWeight) * 100),
+    weight: totalWeight === 0 ? 0 : Math.round((table[part.dimension] / totalWeight) * 100),
   }));
 
   return { score, breakdown, reasons };
