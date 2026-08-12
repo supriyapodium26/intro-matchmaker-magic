@@ -4,8 +4,7 @@ import confetti from "canvas-confetti";
 import { Check, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import chatMark from "@/assets/podium-chat-mark.png.asset.json";
-import podiumLogo from "@/assets/podium-logo-wordmark-white.png.asset.json";
+import podiumMark from "@/assets/podium-mark.png";
 import {
   Conversation,
   ConversationContent,
@@ -130,13 +129,16 @@ function Index() {
   return (
     <main className="mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden px-4 sm:px-8">
       <header className="-mx-4 flex shrink-0 items-center justify-between gap-3 border-b border-foreground/10 bg-foreground px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:-mx-8 sm:px-8 sm:py-5">
-        <img
-          src={podiumLogo.url}
-          alt="Podium"
-          width={587}
-          height={170}
-          className="h-6 w-auto max-w-[7.5rem] object-contain sm:h-8 sm:max-w-[9rem]"
-        />
+        <div className="flex items-center gap-2.5">
+          <img
+            src={podiumMark}
+            alt=""
+            className="size-8 rounded-full object-cover"
+          />
+          <span className="font-display text-lg leading-none text-background">
+            Podium Introductions
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => setSessionKey((current) => current + 1)}
@@ -409,10 +411,8 @@ function IntakeChat() {
           {!hasStarted ? (
             <div className="flex flex-1 flex-col items-center justify-center py-16 text-center duration-500 animate-in fade-in">
               <img
-                src={chatMark.url}
+                src={podiumMark}
                 alt=""
-                width={324}
-                height={243}
                 className="mb-7 size-16 rounded-full object-cover shadow-sm"
               />
               <p className="max-w-xs font-display text-3xl leading-tight text-foreground">
@@ -443,10 +443,8 @@ function IntakeChat() {
                     <span aria-hidden="true" className="size-7 shrink-0" />
                   ) : (
                     <img
-                      src={chatMark.url}
+                      src={podiumMark}
                       alt="Podium"
-                      width={324}
-                      height={243}
                       className="size-7 shrink-0 rounded-full object-cover"
                     />
                   )}
@@ -477,6 +475,7 @@ function IntakeChat() {
 
       <div
         ref={dockRef}
+        hidden={!showDock && !error}
         className={`-mx-4 flex max-h-[56dvh] shrink-0 flex-col rounded-t-3xl border-t border-border bg-card/85 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md transition-shadow sm:-mx-8 sm:px-8 ${
           showDock ? "shadow-[0_-14px_40px_-26px_rgba(50,48,46,0.7)]" : ""
         }`}
@@ -748,10 +747,8 @@ function TypingBubble() {
   return (
     <div className="flex items-end gap-2 duration-300 animate-in fade-in">
       <img
-        src={chatMark.url}
+        src={podiumMark}
         alt="Podium"
-        width={324}
-        height={243}
         className="size-7 shrink-0 rounded-full object-cover"
       />
       <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-card px-4 py-3.5 shadow-sm">
