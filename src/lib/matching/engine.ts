@@ -282,8 +282,6 @@ function roleDescriptor(roleLabel: string | null, expertise: string | null) {
   }
   return `is a ${role}${field}`;
 }
-${lower}`;
-}
 
 function rank(
   seeker: Seeker,
