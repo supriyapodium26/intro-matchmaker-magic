@@ -31,9 +31,13 @@ Cleaning applied during import:
 - Role mapped to a 6-level ladder (IC → senior IC → manager → senior manager/manager-of-managers → director/VP → C-suite; "Founder" and "Between roles" handled as special cases) so "Role ± 1 level" works.
 - Company size mapped to 5 ordered bands so "± 1 band" works.
 
-**Important gap:** the export has no stage answers — those only come from the new form. Per section 6 of the rules, that makes the whole export the Route B fallback pool. So the demo would only ever produce Route B matches, and the 40% stage signal would never fire.
+**Two pools, exactly as section 6 describes — no invented stage data.**
 
-Recommended handling: implement both paths properly, and for the demo assign each member a plausible stage within their ICP (deterministic, derived from role/company size/age so it isn't random) stored in a separate `derived_stage` column that is clearly labelled as inferred in the UI. Route A (full cascade) then runs against them, and Route B stays implemented for members whose stage is unknown. If you'd rather not infer, say so and the demo runs Route B only.
+- **Route A pool:** everyone who completes this demo form. Their intake answer is a full profile (stage, ICP, business type, life context, role, company, expertise, countries, child status, DOB), so they are stored in a `respondents` table and matched with the full cascade including the 40% stage signal.
+- **Route B pool:** the 399 imported members, no stage data, matched with the fallback priority order (expertise → life context → interests → countries breadth) and flagged in the results as fallback matches.
+
+Matching tries Route A first and falls back to Route B when Route A can't produce 3 candidates. So on day one every result comes from the 399 members and is labelled "fallback"; as form responses come in, Route A matches appear automatically with no code change. Each result card shows which route and which filter step produced it, so you can watch the pool mature.
+
 
 ## 3. Matching algorithm
 
@@ -55,7 +59,7 @@ Top 3 member cards: name, ICP, stage, role/company, score badge with band, why-y
 
 ## 5. Technical notes
 
-- Lovable Cloud enabled: `members` (seeded via migration, public read of non-contact columns only) and `responses` (intake submissions with partial-fill tracking, service-role only).
+- Lovable Cloud enabled: `members` (the 399 imported rows, seeded via migration), `respondents` (completed demo intakes — this is the Route A pool that grows over time) and `responses` (raw intake submissions with partial-fill tracking). All contact data is service-role only.
 - Matching runs in a `createServerFn` so contact details of members are never shipped to the browser except for the 3 selected matches.
 - `src/lib/matching/` holds the ICP stage matrices, weights, tier tables and ladders as plain data — tunable without touching flow code.
 - Intake tree lives in `src/lib/intake-tree.ts` as data (nodes, gates, reroute jumps) so wording changes stay in one file.
