@@ -59,7 +59,7 @@ Top 3 member cards: name, ICP, stage, role/company, score badge with band, why-y
 
 ## 5. Technical notes
 
-- Lovable Cloud enabled: `members` (seeded via migration, public read of non-contact columns only) and `responses` (intake submissions with partial-fill tracking, service-role only).
+- Lovable Cloud enabled: `members` (the 399 imported rows, seeded via migration), `respondents` (completed demo intakes — this is the Route A pool that grows over time) and `responses` (raw intake submissions with partial-fill tracking). All contact data is service-role only.
 - Matching runs in a `createServerFn` so contact details of members are never shipped to the browser except for the 3 selected matches.
 - `src/lib/matching/` holds the ICP stage matrices, weights, tier tables and ladders as plain data — tunable without touching flow code.
 - Intake tree lives in `src/lib/intake-tree.ts` as data (nodes, gates, reroute jumps) so wording changes stay in one file.
