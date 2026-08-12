@@ -1,14 +1,76 @@
-const display =
-  typeof Intl !== "undefined" && "DisplayNames" in Intl
-    ? new Intl.DisplayNames(["en"], { type: "region" })
-    : null;
+// ISO2 -> readable country name. An explicit table (not Intl.DisplayNames) so the
+// server runtime's ICU coverage can't turn names back into raw codes.
+const NAMES: Record<string, string> = {
+  AE: "UAE",
+  AF: "Afghanistan",
+  AN: "Netherlands Antilles",
+  AO: "Angola",
+  AT: "Austria",
+  AU: "Australia",
+  BE: "Belgium",
+  BG: "Bulgaria",
+  BH: "Bahrain",
+  BR: "Brazil",
+  BT: "Bhutan",
+  BW: "Botswana",
+  CA: "Canada",
+  CH: "Switzerland",
+  CL: "Chile",
+  CN: "China",
+  CY: "Cyprus",
+  DE: "Germany",
+  DK: "Denmark",
+  DZ: "Algeria",
+  EG: "Egypt",
+  ES: "Spain",
+  FI: "Finland",
+  FR: "France",
+  GB: "the UK",
+  GH: "Ghana",
+  GR: "Greece",
+  HK: "Hong Kong",
+  HU: "Hungary",
+  ID: "Indonesia",
+  IE: "Ireland",
+  IL: "Israel",
+  IN: "India",
+  IS: "Iceland",
+  IT: "Italy",
+  JO: "Jordan",
+  JP: "Japan",
+  KR: "South Korea",
+  KZ: "Kazakhstan",
+  LB: "Lebanon",
+  LK: "Sri Lanka",
+  LU: "Luxembourg",
+  MA: "Morocco",
+  MM: "Myanmar",
+  MO: "Macau",
+  MX: "Mexico",
+  MY: "Malaysia",
+  NG: "Nigeria",
+  NL: "the Netherlands",
+  NO: "Norway",
+  NP: "Nepal",
+  NZ: "New Zealand",
+  OM: "Oman",
+  PH: "the Philippines",
+  PT: "Portugal",
+  QA: "Qatar",
+  RO: "Romania",
+  RU: "Russia",
+  SA: "Saudi Arabia",
+  SE: "Sweden",
+  SG: "Singapore",
+  TH: "Thailand",
+  TR: "Turkey",
+  TW: "Taiwan",
+  US: "the US",
+  VN: "Vietnam",
+  ZA: "South Africa",
+  ZM: "Zambia",
+};
 
-/** ISO2 code -> readable country name, e.g. "NG" -> "Nigeria". */
 export function countryName(code: string) {
-  if (code.length !== 2) return code;
-  try {
-    return display?.of(code.toUpperCase()) ?? code;
-  } catch {
-    return code;
-  }
+  return NAMES[code.toUpperCase()] ?? code;
 }
