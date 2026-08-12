@@ -136,6 +136,18 @@ export const COUNTRY_TIERS: Record<string, number> = {
 // A breadth-only fallback can never outrank a real shared country.
 export const COUNTRY_FALLBACK_CAP = 0.5;
 
+// Route B (imported membership pool) has no stage or business-type answers on
+// file, so those signals are replaced by the fallback priority order:
+// expertise -> life context -> interests -> countries breadth.
+export const ROUTE_B_WEIGHTS = {
+  stage: 0,
+  businessType: 0,
+  expertise: 40,
+  lifeContext: 25,
+  interests: 20,
+  countries: 15,
+} as const;
+
 export const THRESHOLDS: { min: number; band: string }[] = [
   { min: 75, band: "Strong match" },
   { min: 55, band: "Good match" },
