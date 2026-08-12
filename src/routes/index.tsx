@@ -131,7 +131,7 @@ function Index() {
       <header className="-mx-4 flex shrink-0 items-center justify-between gap-3 border-b border-foreground/10 bg-foreground px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:-mx-8 sm:px-8 sm:py-5">
         <div className="flex items-center gap-2.5">
           <img
-            src={podiumMark}
+            src={podiumLogo.url}
             alt=""
             className="size-8 rounded-full object-cover"
           />
@@ -411,7 +411,7 @@ function IntakeChat() {
           {!hasStarted ? (
             <div className="flex flex-1 flex-col items-center justify-center py-16 text-center duration-500 animate-in fade-in">
               <img
-                src={podiumMark}
+                src={podiumLogo.url}
                 alt=""
                 className="mb-7 size-16 rounded-full object-cover shadow-sm"
               />
@@ -443,7 +443,7 @@ function IntakeChat() {
                     <span aria-hidden="true" className="size-7 shrink-0" />
                   ) : (
                     <img
-                      src={podiumMark}
+                      src={podiumLogo.url}
                       alt="Podium"
                       className="size-7 shrink-0 rounded-full object-cover"
                     />
@@ -747,7 +747,7 @@ function TypingBubble() {
   return (
     <div className="flex items-end gap-2 duration-300 animate-in fade-in">
       <img
-        src={podiumMark}
+        src={podiumLogo.url}
         alt="Podium"
         className="size-7 shrink-0 rounded-full object-cover"
       />
