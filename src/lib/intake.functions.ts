@@ -80,13 +80,15 @@ export type PublicMatch = {
   countries: string[];
   lifeContext: string[];
   interests: string[];
+  email: string | null;
+  linkedin: string | null;
   headline: string;
   reasons: string[];
   breakdown: { label: string; score: number; weight: number }[];
 };
 
 const MEMBER_COLUMNS =
-  "id, name, icp, dob, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests";
+  "id, name, email, linkedin, icp, dob, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests";
 
 function firstNameAndInitial(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -176,9 +178,9 @@ function toCandidate(row: MemberRow, route: "A" | "B"): Candidate {
     stageIndex: route === "A" ? ((row['stage_index'] as number | null) ?? null) : null,
     stageLabel: route === "A" ? ((row['stage_label'] as string | null) ?? null) : null,
     businessType: route === "A" ? ((row['business_type'] as string | null) ?? null) : null,
-    email: null,
+    email: (row['email'] as string | null) ?? null,
     phone: null,
-    linkedin: null,
+    linkedin: (row['linkedin'] as string | null) ?? null,
   };
 }
 
@@ -322,6 +324,8 @@ export const submitIntake = createServerFn({ method: "POST" })
       countries: match.candidate.countries,
       lifeContext: match.candidate.lifeContext,
       interests: match.candidate.interests,
+      email: match.candidate.email,
+      linkedin: match.candidate.linkedin,
       headline: match.headline,
       reasons: match.reasons,
       breakdown: match.breakdown.map((part) => ({
