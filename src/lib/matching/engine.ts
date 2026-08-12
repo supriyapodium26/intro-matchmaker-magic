@@ -257,13 +257,8 @@ function listOf(items: string[]) {
 function headlineFor(seeker: Seeker, candidate: Candidate) {
   const first = candidate.name.trim().split(/\s+/)[0] ?? "She";
   const bits: string[] = [];
-  if (candidate.roleLabel && candidate.expertise) {
-    bits.push(`is ${article(candidate.roleLabel)} in ${candidate.expertise}`);
-  } else if (candidate.roleLabel) {
-    bits.push(`is ${article(candidate.roleLabel)}`);
-  } else if (candidate.expertise) {
-    bits.push(`works in ${candidate.expertise}`);
-  }
+  const role = roleDescriptor(candidate.roleLabel, candidate.expertise);
+  if (role) bits.push(role);
   if (seeker.age !== null && candidate.age !== null) {
     const gap = Math.abs(seeker.age - candidate.age);
     if (gap <= 2) bits.push("is right around your age");
@@ -273,9 +268,21 @@ function headlineFor(seeker: Seeker, candidate: Candidate) {
   return `${first} ${listOf(bits)}.`;
 }
 
-function article(role: string) {
-  const lower = role.toLowerCase();
-  return `${/^[aeiou]/.test(lower) ? "an" : "a"} ${lower}`;
+/** Reads naturally in a sentence: "Jovita is a manager in Consulting, ...". */
+function roleDescriptor(roleLabel: string | null, expertise: string | null) {
+  const field = expertise ? ` in ${expertise}` : "";
+  if (!roleLabel) return expertise ? `works in ${expertise}` : "";
+  const role = roleLabel.toLowerCase();
+  if (role.includes("founder")) return `runs her own business${field}`;
+  if (role.includes("c-suite")) return `sits in the C-suite${field}`;
+  if (role.includes("between roles")) return `is between roles right now${expertise ? `, with a background in ${expertise}` : ""}`;
+  if (role.includes("director") || role.includes("vp")) return `leads at director level${field}`;
+  if (role.includes("individual contributor")) {
+    return `is ${role.startsWith("senior") ? "a senior specialist" : "a specialist"}${field}`;
+  }
+  return `is a ${role}${field}`;
+}
+${lower}`;
 }
 
 function rank(
