@@ -14,7 +14,177 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      members: {
+        Row: {
+          child_status: string | null
+          company_size: string | null
+          company_size_band: number | null
+          company_type: string | null
+          countries: string[]
+          created_at: string
+          dob: string | null
+          email: string | null
+          expertise: string | null
+          icp: string
+          icp_flagged: boolean
+          icp_source: string | null
+          id: string
+          interests: string[]
+          life_context: string[]
+          linkedin: string | null
+          name: string
+          phone: string | null
+          relationship_status: string | null
+          role_label: string | null
+          role_level: number | null
+        }
+        Insert: {
+          child_status?: string | null
+          company_size?: string | null
+          company_size_band?: number | null
+          company_type?: string | null
+          countries?: string[]
+          created_at?: string
+          dob?: string | null
+          email?: string | null
+          expertise?: string | null
+          icp: string
+          icp_flagged?: boolean
+          icp_source?: string | null
+          id?: string
+          interests?: string[]
+          life_context?: string[]
+          linkedin?: string | null
+          name: string
+          phone?: string | null
+          relationship_status?: string | null
+          role_label?: string | null
+          role_level?: number | null
+        }
+        Update: {
+          child_status?: string | null
+          company_size?: string | null
+          company_size_band?: number | null
+          company_type?: string | null
+          countries?: string[]
+          created_at?: string
+          dob?: string | null
+          email?: string | null
+          expertise?: string | null
+          icp?: string
+          icp_flagged?: boolean
+          icp_source?: string | null
+          id?: string
+          interests?: string[]
+          life_context?: string[]
+          linkedin?: string | null
+          name?: string
+          phone?: string | null
+          relationship_status?: string | null
+          role_label?: string | null
+          role_level?: number | null
+        }
+        Relationships: []
+      }
+      respondents: {
+        Row: {
+          birth_year: number | null
+          business_type: string | null
+          child_status: string | null
+          company_size: string | null
+          company_size_band: number | null
+          company_type: string | null
+          completed: boolean
+          countries: string[]
+          created_at: string
+          email: string | null
+          expertise: string | null
+          founder_tenure: string | null
+          gate_answer: string | null
+          icp: string | null
+          id: string
+          interests: string[]
+          last_step: string | null
+          life_context: string[]
+          match_count: number | null
+          name: string | null
+          open_text: string | null
+          phone: string | null
+          reroute_answer: string | null
+          role_label: string | null
+          role_level: number | null
+          stage_index: number | null
+          stage_label: string | null
+          transcript: Json | null
+          updated_at: string
+          visitor_id: string
+        }
+        Insert: {
+          birth_year?: number | null
+          business_type?: string | null
+          child_status?: string | null
+          company_size?: string | null
+          company_size_band?: number | null
+          company_type?: string | null
+          completed?: boolean
+          countries?: string[]
+          created_at?: string
+          email?: string | null
+          expertise?: string | null
+          founder_tenure?: string | null
+          gate_answer?: string | null
+          icp?: string | null
+          id?: string
+          interests?: string[]
+          last_step?: string | null
+          life_context?: string[]
+          match_count?: number | null
+          name?: string | null
+          open_text?: string | null
+          phone?: string | null
+          reroute_answer?: string | null
+          role_label?: string | null
+          role_level?: number | null
+          stage_index?: number | null
+          stage_label?: string | null
+          transcript?: Json | null
+          updated_at?: string
+          visitor_id: string
+        }
+        Update: {
+          birth_year?: number | null
+          business_type?: string | null
+          child_status?: string | null
+          company_size?: string | null
+          company_size_band?: number | null
+          company_type?: string | null
+          completed?: boolean
+          countries?: string[]
+          created_at?: string
+          email?: string | null
+          expertise?: string | null
+          founder_tenure?: string | null
+          gate_answer?: string | null
+          icp?: string | null
+          id?: string
+          interests?: string[]
+          last_step?: string | null
+          life_context?: string[]
+          match_count?: number | null
+          name?: string | null
+          open_text?: string | null
+          phone?: string | null
+          reroute_answer?: string | null
+          role_label?: string | null
+          role_level?: number | null
+          stage_index?: number | null
+          stage_label?: string | null
+          transcript?: Json | null
+          updated_at?: string
+          visitor_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
