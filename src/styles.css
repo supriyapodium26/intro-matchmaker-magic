@@ -58,43 +58,51 @@
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-cream-300: var(--cream-300);
+  --color-cream-400: var(--cream-400);
+  --color-orange-tint: var(--orange-tint);
+  --font-display: "Crimson Pro", Georgia, serif;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
+  --background: oklch(0.992 0.008 106.5);
+  --foreground: oklch(0.311 0.005 67.7);
+  --card: oklch(0.968 0.030 104.9);
+  --card-foreground: oklch(0.311 0.005 67.7);
+  --popover: oklch(0.992 0.008 106.5);
+  --popover-foreground: oklch(0.311 0.005 67.7);
+  --primary: oklch(0.579 0.178 41.0);
+  --primary-foreground: oklch(0.992 0.008 106.5);
+  --secondary: oklch(0.977 0.024 106.8);
+  --secondary-foreground: oklch(0.311 0.005 67.7);
+  --muted: oklch(0.977 0.024 106.8);
+  --muted-foreground: oklch(0.527 0.008 67.7);
+  --accent: oklch(0.907 0.036 49.2);
+  --accent-foreground: oklch(0.311 0.005 67.7);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --destructive-foreground: oklch(0.992 0.008 106.5);
+  --border: oklch(0.311 0.005 67.7 / 12%);
+  --input: oklch(0.311 0.005 67.7 / 16%);
+  --ring: oklch(0.649 0.149 47.4);
+  --cream-300: oklch(0.977 0.024 106.8);
+  --cream-400: oklch(0.968 0.030 104.9);
+  --orange-tint: oklch(0.907 0.036 49.2);
+  --chart-1: oklch(0.579 0.178 41.0);
+  --chart-2: oklch(0.649 0.149 47.4);
+  --chart-3: oklch(0.527 0.008 67.7);
+  --chart-4: oklch(0.907 0.036 49.2);
+  --chart-5: oklch(0.311 0.005 67.7);
+  --sidebar: oklch(0.968 0.030 104.9);
+  --sidebar-foreground: oklch(0.311 0.005 67.7);
+  --sidebar-primary: oklch(0.579 0.178 41.0);
+  --sidebar-primary-foreground: oklch(0.992 0.008 106.5);
+  --sidebar-accent: oklch(0.977 0.024 106.8);
+  --sidebar-accent-foreground: oklch(0.311 0.005 67.7);
+  --sidebar-border: oklch(0.311 0.005 67.7 / 12%);
+  --sidebar-ring: oklch(0.649 0.149 47.4);
 }
 
 .dark {
@@ -140,5 +148,47 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+  }
+}
+
+@keyframes podium-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+@utility animate-shake {
+  animation: podium-shake 0.3s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
