@@ -1,7 +1,7 @@
 // Pure matching engine: hard-filter cascade + weighted scoring, per the algorithm doc.
 
 import type { IcpKey } from "@/lib/intake-tree";
-import { LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
+import { HOME_COUNTRY, ICP_WARM_PHRASE, LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
 import { countryName } from "@/lib/countries";
 import {
   CHILDFREE_STATUSES,
@@ -57,6 +57,7 @@ export type Match = {
   route: "A" | "B";
   filterStep: string;
   breakdown: MatchBreakdown[];
+  headline: string;
   reasons: string[];
   hobbyOnly: boolean;
 };
@@ -71,11 +72,16 @@ function jaccard(a: string[], b: string[]) {
 }
 
 function breadth(countries: string[]) {
-  if (countries.length === 0) return null;
-  return Math.max(...countries.map((code) => COUNTRY_TIERS[code] ?? 0.6));
+  const relevant = countries.filter((code) => code !== HOME_COUNTRY);
+  if (relevant.length === 0) return null;
+  return Math.max(...relevant.map((code) => COUNTRY_TIERS[code] ?? 0.6));
 }
 
-function countryScore(a: string[], b: string[]) {
+// Podium is Singapore-based, so a shared Singapore says nothing about either
+// person — it is excluded from the countries signal entirely.
+function countryScore(rawA: string[], rawB: string[]) {
+  const a = rawA.filter((code) => code !== HOME_COUNTRY);
+  const b = rawB.filter((code) => code !== HOME_COUNTRY);
   const shared = a.filter((code) => b.includes(code));
   if (shared.length > 0) return { score: 1, shared };
   const breadthA = breadth(a);
@@ -181,44 +187,45 @@ export function scoreCandidate(
   const stage = options.hobbyOnly ? null : stageScore(seeker, candidate);
   if (stage !== null) {
     parts.push({ dimension: "stage", score: stage });
-    if (stage >= 0.9 && candidate.stageLabel) {
-      reasons.push(`Both at the same point: ${candidate.stageLabel.toLowerCase()}`);
-    } else if (stage >= 0.5 && candidate.stageLabel) {
-      reasons.push(`Adjacent stage — she's ${candidate.stageLabel.toLowerCase()}`);
+    if (stage >= 0.9) {
+      reasons.push(`You're in almost exactly the same chapter right now`);
+    } else if (stage >= 0.5) {
+      reasons.push(`You're a step apart on the same path, so there's plenty to compare notes on`);
     }
   }
 
   if (!options.hobbyOnly && options.collectsBusinessType && seeker.businessType && candidate.businessType) {
     const same = seeker.businessType === candidate.businessType ? 1 : 0;
     parts.push({ dimension: "businessType", score: same });
-    if (same) reasons.push(`Building the same kind of business — ${candidate.businessType.split("—")[0]!.trim()}`);
+    if (same)
+      reasons.push(
+        `You're building the same kind of thing — ${candidate.businessType.split("—")[0]!.trim().toLowerCase()}`,
+      );
   }
 
   if (!options.hobbyOnly && seeker.expertise && candidate.expertise) {
     const same = seeker.expertise === candidate.expertise ? 1 : 0;
     parts.push({ dimension: "expertise", score: same });
-    if (same) reasons.push(`Shared expertise in ${candidate.expertise}`);
+    if (same) reasons.push(`You both work in ${candidate.expertise}`);
   }
 
   const life = jaccard(seeker.lifeContext, candidate.lifeContext);
   parts.push({ dimension: "lifeContext", score: life.score });
   if (life.shared.length > 0) {
     const labels = life.shared.map((tag) => LIFE_CONTEXT_TAG_LABELS[tag] ?? tag);
-    reasons.push(`You're both ${labels.slice(0, 2).join(" and ")}`);
+    reasons.push(`You're both ${labels.slice(0, 2).join(" and ")} — she'll get it without you explaining`);
   }
 
   const interests = jaccard(seeker.interests, candidate.interests);
   parts.push({ dimension: "interests", score: interests.score });
   if (interests.shared.length > 0) {
-    reasons.push(`Shared interests: ${interests.shared.slice(0, 3).join(", ")}`);
+    reasons.push(`She's into ${listOf(interests.shared.slice(0, 3))} too`);
   }
 
   const countries = countryScore(seeker.countries, candidate.countries);
   parts.push({ dimension: "countries", score: countries.score });
   if (countries.shared.length > 0) {
-    reasons.push(
-      `You've both lived in ${countries.shared.slice(0, 2).map(countryName).join(", ")}`,
-    );
+    reasons.push(`You've both lived in ${listOf(countries.shared.slice(0, 2).map(countryName))}`);
   }
 
   // Route B members carry no stage/business-type answers, so they are scored on
@@ -237,7 +244,44 @@ export function scoreCandidate(
     weight: totalWeight === 0 ? 0 : Math.round((table[part.dimension] / totalWeight) * 100),
   }));
 
-  return { score, breakdown, reasons };
+  return { score, breakdown, reasons, headline: headlineFor(seeker, candidate) };
+}
+
+function listOf(items: string[]) {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** One warm sentence introducing the match, e.g. "Jovita is a manager in
+ * Consulting, close to your age, and she's at a career crossroads too." */
+function headlineFor(seeker: Seeker, candidate: Candidate) {
+  const first = candidate.name.trim().split(/\s+/)[0] ?? "She";
+  const bits: string[] = [];
+  const role = roleDescriptor(candidate.roleLabel, candidate.expertise);
+  if (role) bits.push(role);
+  if (seeker.age !== null && candidate.age !== null) {
+    const gap = Math.abs(seeker.age - candidate.age);
+    if (gap <= 2) bits.push("is right around your age");
+    else if (gap <= 5) bits.push("is close to your age");
+  }
+  bits.push(`is ${ICP_WARM_PHRASE[candidate.icp]}`);
+  return `${first} ${listOf(bits)}.`;
+}
+
+/** Reads naturally in a sentence: "Jovita is a manager in Consulting, ...". */
+function roleDescriptor(roleLabel: string | null, expertise: string | null) {
+  const field = expertise ? ` in ${expertise}` : "";
+  if (!roleLabel) return expertise ? `works in ${expertise}` : "";
+  const role = roleLabel.toLowerCase();
+  if (role.includes("founder")) return `runs her own business${field}`;
+  if (role.includes("c-suite")) return `sits in the C-suite${field}`;
+  if (role.includes("between roles"))
+    return expertise ? `is between roles with a background in ${expertise}` : "is between roles right now";
+  if (role.includes("director") || role.includes("vp")) return `leads at director level${field}`;
+  if (role.includes("individual contributor")) {
+    return `is ${role.startsWith("senior") ? "a senior specialist" : "a specialist"}${field}`;
+  }
+  return `is a ${role}${field}`;
 }
 
 function rank(
@@ -249,7 +293,7 @@ function rank(
   const { survivors, stepLabel, hobbyOnly } = applyHardFilters(seeker, pool);
   return survivors
     .map((candidate) => {
-      const { score, breakdown, reasons } = scoreCandidate(seeker, candidate, {
+      const { score, breakdown, reasons, headline } = scoreCandidate(seeker, candidate, {
         hobbyOnly,
         collectsBusinessType,
       });
@@ -260,6 +304,7 @@ function rank(
         route: candidate.route,
         filterStep: stepLabel,
         breakdown,
+        headline,
         reasons,
         hobbyOnly,
       } satisfies Match;

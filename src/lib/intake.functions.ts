@@ -5,12 +5,14 @@ import type { IcpKey } from "@/lib/intake-tree";
 import { BUSINESS_TYPE_ICPS } from "@/lib/intake-tree";
 import { ageFromDob, findMatches, type Candidate, type Seeker } from "@/lib/matching/engine";
 
-const payloadSchema = z.object({
-  visitorId: z.string().min(3).max(80),
+const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(200),
   phone: z.string().trim().min(4).max(40),
-  birthYear: z.number().int().min(1940).max(2012),
+});
+
+const payloadSchema = contactSchema.extend({
+  visitorId: z.string().min(3).max(80),
   icp: z.string().min(1).max(60),
   gateAnswer: z.string().max(20).nullable(),
   rerouteAnswer: z.string().max(400).nullable(),
@@ -20,21 +22,43 @@ const payloadSchema = z.object({
   businessType: z.string().max(200).nullable(),
   openText: z.string().max(2000).nullable(),
   lifeContext: z.array(z.string().max(40)).max(24),
-  roleLabel: z.string().max(120).nullable(),
-  roleLevel: z.number().int().min(1).max(6).nullable(),
-  companyType: z.string().max(120).nullable(),
-  companySize: z.string().max(60).nullable(),
-  companySizeBand: z.number().int().min(1).max(5).nullable(),
-  expertise: z.string().max(120).nullable(),
-  countries: z.array(z.string().length(2)).max(12),
-  childStatus: z.string().max(40).nullable(),
-  interests: z.array(z.string().max(60)).max(20),
   transcript: z
     .array(z.object({ role: z.enum(["bot", "user"]), text: z.string().max(2000) }))
     .max(120),
 });
 
 type Payload = z.infer<typeof payloadSchema>;
+
+/** Profile facts we read out of the membership database instead of asking for them. */
+type MemberProfile = {
+  memberId: string | null;
+  age: number | null;
+  roleLabel: string | null;
+  roleLevel: number | null;
+  companyType: string | null;
+  companySize: string | null;
+  companySizeBand: number | null;
+  expertise: string | null;
+  countries: string[];
+  lifeContext: string[];
+  interests: string[];
+  childStatus: string | null;
+};
+
+const EMPTY_PROFILE: MemberProfile = {
+  memberId: null,
+  age: null,
+  roleLabel: null,
+  roleLevel: null,
+  companyType: null,
+  companySize: null,
+  companySizeBand: null,
+  expertise: null,
+  countries: [],
+  lifeContext: [],
+  interests: [],
+  childStatus: null,
+};
 
 /** Public-facing match shape — deliberately excludes member contact details. */
 export type PublicMatch = {
@@ -56,9 +80,13 @@ export type PublicMatch = {
   countries: string[];
   lifeContext: string[];
   interests: string[];
+  headline: string;
   reasons: string[];
   breakdown: { label: string; score: number; weight: number }[];
 };
+
+const MEMBER_COLUMNS =
+  "id, name, icp, dob, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests";
 
 function firstNameAndInitial(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -67,7 +95,62 @@ function firstNameAndInitial(name: string) {
   return last ? `${first} ${last.charAt(0).toUpperCase()}.` : first;
 }
 
-function toCandidate(row: Record<string, unknown>, route: "A" | "B"): Candidate {
+function digits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+type MemberRow = Record<string, unknown>;
+
+function profileFrom(row: MemberRow): MemberProfile {
+  return {
+    memberId: String(row['id']),
+    age: ageFromDob((row['dob'] as string | null) ?? null),
+    roleLabel: (row['role_label'] as string | null) ?? null,
+    roleLevel: (row['role_level'] as number | null) ?? null,
+    companyType: (row['company_type'] as string | null) ?? null,
+    companySize: (row['company_size'] as string | null) ?? null,
+    companySizeBand: (row['company_size_band'] as number | null) ?? null,
+    expertise: (row['expertise'] as string | null) ?? null,
+    countries: (row['countries'] as string[] | null) ?? [],
+    lifeContext: (row['life_context'] as string[] | null) ?? [],
+    interests: (row['interests'] as string[] | null) ?? [],
+    childStatus: (row['child_status'] as string | null) ?? null,
+  };
+}
+
+/**
+ * Finds the member record behind the contact details the visitor typed, so the
+ * chat never has to ask for age, role, company, expertise, countries or interests.
+ */
+type QueryLike = {
+  select: (columns: string) => {
+    ilike: (column: string, value: string) => PromiseLike<{ data: MemberRow[] | null }>;
+  };
+};
+type AdminLike = { from: (table: string) => QueryLike };
+
+async function findMemberRow(
+  supabaseAdmin: AdminLike,
+  contact: { name: string; email: string; phone: string },
+) {
+  const byEmail = await supabaseAdmin.from("members").select(MEMBER_COLUMNS).ilike("email", contact.email);
+  const emailHit = (byEmail.data ?? [])[0];
+  if (emailHit) return { row: emailHit, matchedOn: "email" as const };
+
+  const byName = await supabaseAdmin.from("members").select(MEMBER_COLUMNS).ilike("name", contact.name);
+  const nameHit = (byName.data ?? [])[0];
+  if (nameHit) return { row: nameHit, matchedOn: "name" as const };
+
+  const wanted = digits(contact.phone).slice(-8);
+  if (wanted.length >= 6) {
+    const byPhone = await supabaseAdmin.from("members").select(`${MEMBER_COLUMNS}, phone`).ilike("phone", `%${wanted}%`);
+    const phoneHit = (byPhone.data ?? [])[0];
+    if (phoneHit) return { row: phoneHit, matchedOn: "phone" as const };
+  }
+  return { row: null, matchedOn: null };
+}
+
+function toCandidate(row: MemberRow, route: "A" | "B"): Candidate {
   const age =
     route === "B"
       ? ageFromDob((row['dob'] as string | null) ?? null)
@@ -99,30 +182,34 @@ function toCandidate(row: Record<string, unknown>, route: "A" | "B"): Candidate 
   };
 }
 
-function seekerFrom(data: Payload): Seeker {
-  return {
-    icp: data.icp as IcpKey,
-    age: new Date().getFullYear() - data.birthYear,
-    roleLabel: data.roleLabel,
-    roleLevel: data.roleLevel,
-    companyType: data.companyType,
-    companySize: data.companySize,
-    companySizeBand: data.companySizeBand,
-    childStatus: data.childStatus,
-    expertise: data.expertise,
-    countries: data.countries,
-    lifeContext: data.lifeContext,
-    interests: data.interests,
-    stageIndex: data.stageIndex,
-    stageLabel: data.stageLabel,
-    businessType: data.businessType,
-  };
-}
+/** Called right after the contact questions so the chat can confirm what we already know. */
+export const lookupMember = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => contactSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { row, matchedOn } = await findMemberRow(supabaseAdmin as unknown as AdminLike, data);
+    if (!row) return { found: false as const };
+    const profile = profileFrom(row);
+    return {
+      found: true as const,
+      matchedOn,
+      firstName: String(row['name'] ?? "").split(/\s+/)[0] ?? "",
+      roleLabel: profile.roleLabel,
+      expertise: profile.expertise,
+      companyType: profile.companyType,
+      interestCount: profile.interests.length,
+      countryCount: profile.countries.length,
+    };
+  });
 
 export const submitIntake = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => payloadSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { row: memberRow } = await findMemberRow(supabaseAdmin as unknown as AdminLike, data);
+    const profile = memberRow ? profileFrom(memberRow) : EMPTY_PROFILE;
+    const birthYear = profile.age ? new Date().getFullYear() - profile.age : null;
 
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("respondents")
@@ -131,7 +218,7 @@ export const submitIntake = createServerFn({ method: "POST" })
         name: data.name,
         email: data.email,
         phone: data.phone,
-        birth_year: data.birthYear,
+        birth_year: birthYear,
         icp: data.icp,
         gate_answer: data.gateAnswer,
         reroute_answer: data.rerouteAnswer,
@@ -141,15 +228,15 @@ export const submitIntake = createServerFn({ method: "POST" })
         business_type: data.businessType,
         open_text: data.openText,
         life_context: data.lifeContext,
-        role_label: data.roleLabel,
-        role_level: data.roleLevel,
-        company_type: data.companyType,
-        company_size: data.companySize,
-        company_size_band: data.companySizeBand,
-        expertise: data.expertise,
-        countries: data.countries,
-        child_status: data.childStatus,
-        interests: data.interests,
+        role_label: profile.roleLabel,
+        role_level: profile.roleLevel,
+        company_type: profile.companyType,
+        company_size: profile.companySize,
+        company_size_band: profile.companySizeBand,
+        expertise: profile.expertise,
+        countries: profile.countries,
+        child_status: profile.childStatus,
+        interests: profile.interests,
         completed: true,
         last_step: "results",
         transcript: data.transcript,
@@ -166,15 +253,11 @@ export const submitIntake = createServerFn({ method: "POST" })
       supabaseAdmin
         .from("respondents")
         .select(
-          "id, name, icp, birth_year, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests, stage_index, stage_label, business_type",
+          "id, name, email, icp, birth_year, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests, stage_index, stage_label, business_type",
         )
         .eq("completed", true)
         .neq("id", inserted.id),
-      supabaseAdmin
-        .from("members")
-        .select(
-          "id, name, icp, dob, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests",
-        ),
+      supabaseAdmin.from("members").select(MEMBER_COLUMNS),
     ]);
 
     if (routeBResult.error) {
@@ -182,10 +265,31 @@ export const submitIntake = createServerFn({ method: "POST" })
       throw new Error("We couldn't reach the membership database. Please try again.");
     }
 
-    const routeA = (routeAResult.data ?? []).map((row) => toCandidate(row, "A"));
-    const routeB = (routeBResult.data ?? []).map((row) => toCandidate(row, "B"));
+    const routeA = (routeAResult.data ?? [])
+      .filter((row) => String(row.email ?? "").toLowerCase() !== data.email.toLowerCase())
+      .map((row) => toCandidate(row, "A"));
+    const routeB = (routeBResult.data ?? [])
+      .filter((row) => String(row.id) !== profile.memberId)
+      .map((row) => toCandidate(row, "B"));
 
-    const seeker = seekerFrom(data);
+    const seeker: Seeker = {
+      icp: data.icp as IcpKey,
+      age: profile.age,
+      roleLabel: profile.roleLabel,
+      roleLevel: profile.roleLevel,
+      companyType: profile.companyType,
+      companySize: profile.companySize,
+      companySizeBand: profile.companySizeBand,
+      childStatus: profile.childStatus,
+      expertise: profile.expertise,
+      countries: profile.countries,
+      lifeContext: [...new Set([...profile.lifeContext, ...data.lifeContext])],
+      interests: profile.interests,
+      stageIndex: data.stageIndex,
+      stageLabel: data.stageLabel,
+      businessType: data.businessType,
+    };
+
     const matches = findMatches(
       seeker,
       routeA,
@@ -218,6 +322,7 @@ export const submitIntake = createServerFn({ method: "POST" })
       countries: match.candidate.countries,
       lifeContext: match.candidate.lifeContext,
       interests: match.candidate.interests,
+      headline: match.headline,
       reasons: match.reasons,
       breakdown: match.breakdown.map((part) => ({
         label: part.label,
@@ -228,6 +333,7 @@ export const submitIntake = createServerFn({ method: "POST" })
 
     return {
       matches: publicMatches,
+      profileFound: Boolean(memberRow),
       poolSizes: { routeA: routeA.length, routeB: routeB.length },
     };
   });

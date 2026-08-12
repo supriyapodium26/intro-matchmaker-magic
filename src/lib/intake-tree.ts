@@ -376,3 +376,16 @@ export const COUNTRY_OPTIONS: { label: string; code: string }[] = [
 export const SHARED_PROFILE_HEADING = "A little more about you";
 export const JOURNEY_HEADING = "Where you are right now";
 export const CONTACT_HEADING = "First, the basics";
+
+/** Warm, human phrasing of each life stage, used in match write-ups. */
+export const ICP_WARM_PHRASE: Record<IcpKey, string> = {
+  career_crossroads: "at a career crossroads too",
+  side_hustler: "also building something alongside a full-time job",
+  early_stage_founder: "also in the early, figuring-it-out days of her own business",
+  late_stage_founder: "also running a business she's been building for years",
+  portfolio_independent: "also working for herself across clients and projects",
+  established_career: "also deep in a corporate career she's still growing",
+};
+
+/** Podium is based in Singapore, so a shared Singapore is not a meaningful signal. */
+export const HOME_COUNTRY = "SG";

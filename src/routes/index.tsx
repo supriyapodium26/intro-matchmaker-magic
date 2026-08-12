@@ -12,26 +12,19 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   BUSINESS_TYPE,
   BUSINESS_TYPE_ICPS,
-  CHILD_STATUS_OPTIONS,
-  COMPANY_SIZE_OPTIONS,
-  COMPANY_TYPE_OPTIONS,
-  COUNTRY_OPTIONS,
-  EXPERTISE_OPTIONS,
   FOUNDER_LENGTH,
   GATES,
   GATE_YES_TARGET,
   ICP_LABELS,
   ICP_OPTIONS,
-  INTEREST_OPTIONS,
   LIFE_CONTEXT_OPTIONS,
   LIFE_CONTEXT_PROMPT,
   OPEN_TEXT_PROMPT,
   REROUTES,
-  ROLE_OPTIONS,
   STAGES,
   type IcpKey,
 } from "@/lib/intake-tree";
-import { submitIntake, type PublicMatch } from "@/lib/intake.functions";
+import { lookupMember, submitIntake, type PublicMatch } from "@/lib/intake.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -59,7 +52,6 @@ type StepId =
   | "name"
   | "email"
   | "phone"
-  | "birthYear"
   | "icp"
   | "gate"
   | "reroute"
@@ -68,20 +60,12 @@ type StepId =
   | "businessType"
   | "openText"
   | "lifeContext"
-  | "role"
-  | "companyType"
-  | "companySize"
-  | "expertise"
-  | "countries"
-  | "childStatus"
-  | "interests"
   | "results";
 
 const ORDER: StepId[] = [
   "name",
   "email",
   "phone",
-  "birthYear",
   "icp",
   "gate",
   "reroute",
@@ -90,13 +74,6 @@ const ORDER: StepId[] = [
   "businessType",
   "openText",
   "lifeContext",
-  "role",
-  "companyType",
-  "companySize",
-  "expertise",
-  "countries",
-  "childStatus",
-  "interests",
   "results",
 ];
 
@@ -104,7 +81,6 @@ type Answers = {
   name: string;
   email: string;
   phone: string;
-  birthYear: number | null;
   initialIcp: IcpKey | null;
   icp: IcpKey | null;
   gateAnswer: "yes" | "no" | null;
@@ -115,22 +91,12 @@ type Answers = {
   businessType: string | null;
   openText: string | null;
   lifeContext: string[];
-  roleLabel: string | null;
-  roleLevel: number | null;
-  companyType: string | null;
-  companySize: string | null;
-  companySizeBand: number | null;
-  expertise: string | null;
-  countries: string[];
-  childStatus: string | null;
-  interests: string[];
 };
 
 const EMPTY: Answers = {
   name: "",
   email: "",
   phone: "",
-  birthYear: null,
   initialIcp: null,
   icp: null,
   gateAnswer: null,
@@ -141,15 +107,6 @@ const EMPTY: Answers = {
   businessType: null,
   openText: null,
   lifeContext: [],
-  roleLabel: null,
-  roleLevel: null,
-  companyType: null,
-  companySize: null,
-  companySizeBand: null,
-  expertise: null,
-  countries: [],
-  childStatus: null,
-  interests: [],
 };
 
 type Bubble = { role: "bot" | "user"; text: string; id: string };
@@ -176,10 +133,12 @@ function Index() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     matches: PublicMatch[];
+    profileFound: boolean;
     poolSizes: { routeA: number; routeB: number };
   } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const run = useServerFn(submitIntake);
+  const lookup = useServerFn(lookupMember);
 
   const prompt = useMemo(() => promptFor(step, answers), [step, answers]);
 
@@ -257,7 +216,6 @@ function Index() {
           name: final.name,
           email: final.email,
           phone: final.phone,
-          birthYear: final.birthYear ?? 1990,
           icp: final.icp ?? "established_career",
           gateAnswer: final.gateAnswer,
           rerouteAnswer: final.rerouteAnswer,
@@ -267,15 +225,6 @@ function Index() {
           businessType: final.businessType,
           openText: final.openText,
           lifeContext: final.lifeContext,
-          roleLabel: final.roleLabel,
-          roleLevel: final.roleLevel,
-          companyType: final.companyType,
-          companySize: final.companySize,
-          companySizeBand: final.companySizeBand,
-          expertise: final.expertise,
-          countries: final.countries,
-          childStatus: final.childStatus,
-          interests: final.interests,
           transcript: transcript.slice(-100),
         },
       });
@@ -283,7 +232,7 @@ function Index() {
       say(
         "bot",
         response.matches.length > 0
-          ? `Here are your ${response.matches.length} closest matches, ${final.name.split(" ")[0]}.`
+          ? `Here are the ${response.matches.length} members I'd introduce you to, ${final.name.split(" ")[0]}.`
           : "I couldn't find a compatible match in the current pool yet — your profile is saved, and we'll match you as the pool grows.",
       );
     } catch (caught) {
@@ -305,18 +254,45 @@ function Index() {
     }
     if (step === "phone") {
       if (value.replace(/\D/g, "").length < 6) return setError("Please enter a reachable phone number.");
-      return advance({ phone: value }, value);
-    }
-    if (step === "birthYear") {
-      const year = Number(value);
-      if (!Number.isInteger(year) || year < 1940 || year > 2012)
-        return setError("Please enter your birth year, e.g. 1988.");
-      return advance({ birthYear: year }, value);
+      void handlePhone(value);
+      return undefined;
     }
     if (step === "openText") {
       return advance({ openText: value || null }, value || "(skipped)");
     }
     return undefined;
+  }
+
+  async function handlePhone(value: string) {
+    const next = { ...answers, phone: value };
+    setAnswers(next);
+    say("user", value);
+    setDraft("");
+    setError(null);
+    setLoading(true);
+    try {
+      const found = await lookup({
+        data: { name: next.name, email: next.email, phone: value },
+      });
+      if (found.found) {
+        const role = [found.roleLabel, found.expertise].filter(Boolean).join(" in ");
+        say(
+          "bot",
+          `Found you in the Podium membership directory${role ? ` — ${role}` : ""}. I'll use what's already on file, so I won't ask you to repeat your age, company, expertise or interests.`,
+        );
+      } else {
+        say(
+          "bot",
+          "I couldn't find you in the membership directory just yet — that's fine, I'll match you on the answers you give me here.",
+        );
+      }
+    } catch {
+      say("bot", "I'll match you on the answers you give me here.");
+    }
+    setLoading(false);
+    setStep("icp");
+    const nextPrompt = promptFor("icp", next);
+    if (nextPrompt) say("bot", nextPrompt.question);
   }
 
   function chooseOption(option: { label: string; value: string }) {
@@ -354,20 +330,6 @@ function Index() {
       }
       case "businessType":
         return advance({ businessType: option.value }, option.label);
-      case "role": {
-        const chosen = ROLE_OPTIONS.find((entry) => entry.label === option.value)!;
-        return advance({ roleLabel: chosen.label, roleLevel: chosen.level }, option.label);
-      }
-      case "companyType":
-        return advance({ companyType: option.value }, option.label);
-      case "companySize": {
-        const chosen = COMPANY_SIZE_OPTIONS.find((entry) => entry.label === option.value)!;
-        return advance({ companySize: chosen.label, companySizeBand: chosen.band }, option.label);
-      }
-      case "expertise":
-        return advance({ expertise: option.value }, option.label);
-      case "childStatus":
-        return advance({ childStatus: option.value }, option.label);
       default:
         return undefined;
     }
@@ -380,19 +342,11 @@ function Index() {
       );
       return advance({ lifeContext: [...new Set(tags)] }, multi.length ? multi.join(" · ") : "None of these");
     }
-    if (step === "countries") {
-      if (multi.length === 0) return setError("Pick at least one country you've lived in.");
-      const codes = multi.map((label) => COUNTRY_OPTIONS.find((entry) => entry.label === label)!.code);
-      return advance({ countries: codes }, multi.join(" · "));
-    }
-    if (step === "interests") {
-      return advance({ interests: multi }, multi.length ? multi.join(" · ") : "None of these");
-    }
     return undefined;
   }
 
-  const isMulti = step === "lifeContext" || step === "countries" || step === "interests";
-  const isText = ["name", "email", "phone", "birthYear", "openText"].includes(step);
+  const isMulti = step === "lifeContext";
+  const isText = ["name", "email", "phone", "openText"].includes(step);
 
   return (
     <main className="min-h-screen bg-background">
@@ -435,7 +389,7 @@ function Index() {
           ))}
 
           {loading && (
-            <p className="text-sm text-muted-foreground">Running the matching cascade…</p>
+            <p className="text-sm text-muted-foreground">One moment…</p>
           )}
 
           {result && (
@@ -444,8 +398,7 @@ function Index() {
                 <MatchCard key={match.id} match={match} rank={index + 1} />
               ))}
               <p className="text-center text-xs text-muted-foreground">
-                Scored against {result.poolSizes.routeB} members in the membership database and{" "}
-                {result.poolSizes.routeA} completed intake profiles.
+                Chosen from {result.poolSizes.routeB} members in the Podium membership directory.
               </p>
             </div>
           )}
@@ -478,7 +431,6 @@ function Index() {
                     onChange={(event) => setDraft(event.target.value)}
                     placeholder={prompt.placeholder}
                     type={step === "email" ? "email" : step === "phone" ? "tel" : "text"}
-                    inputMode={step === "birthYear" ? "numeric" : undefined}
                     autoFocus
                   />
                 )}
@@ -555,9 +507,7 @@ function promptFor(step: StepId, answers: Answers): Prompt | null {
     case "email":
       return { question: "What email should we use for your introductions?", placeholder: "you@example.com", options: [] };
     case "phone":
-      return { question: "And a phone number, in case we need to reach you?", placeholder: "+65 9123 4567", options: [] };
-    case "birthYear":
-      return { question: "What year were you born?", placeholder: "1988", options: [] };
+      return { question: "And a phone number, so I can find your membership record?", placeholder: "+65 9123 4567", options: [] };
     case "icp":
       return {
         question: "Which of these sounds most like you right now?",
@@ -597,26 +547,6 @@ function promptFor(step: StepId, answers: Answers): Prompt | null {
         question: LIFE_CONTEXT_PROMPT,
         options: asOptions(LIFE_CONTEXT_OPTIONS.map((option) => option.label)),
       };
-    case "role":
-      return { question: "What's your current level?", options: asOptions(ROLE_OPTIONS.map((o) => o.label)) };
-    case "companyType":
-      return { question: "What kind of organisation do you work in?", options: asOptions(COMPANY_TYPE_OPTIONS) };
-    case "companySize":
-      return { question: "Roughly how big is it?", options: asOptions(COMPANY_SIZE_OPTIONS.map((o) => o.label)) };
-    case "expertise":
-      return { question: "Where does your expertise sit?", options: asOptions(EXPERTISE_OPTIONS) };
-    case "countries":
-      return {
-        question: "Which countries have you lived in?",
-        options: asOptions(COUNTRY_OPTIONS.map((option) => option.label)),
-      };
-    case "childStatus":
-      return {
-        question: "And where are you when it comes to children?",
-        options: CHILD_STATUS_OPTIONS.map((option) => ({ label: option.label, value: option.value })),
-      };
-    case "interests":
-      return { question: "Last one — what do you do for yourself outside work?", options: asOptions(INTEREST_OPTIONS) };
     default:
       return null;
   }
