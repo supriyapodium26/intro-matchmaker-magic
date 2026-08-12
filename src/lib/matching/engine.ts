@@ -107,8 +107,8 @@ function bandOf(score: number) {
   return THRESHOLDS.find((entry) => score >= entry.min)?.band ?? "Weak";
 }
 
-/** Stage 1 — hard filters, loosened one step at a time until 2+ candidates survive. */
-export function applyHardFilters(seeker: Seeker, pool: Candidate[]) {
+/** Stage 1 — hard filters, loosened one step at a time until enough candidates survive. */
+export function applyHardFilters(seeker: Seeker, pool: Candidate[], minimum = 3) {
   const sameIcp = pool.filter((candidate) => candidate.icp === seeker.icp);
   let survivors = sameIcp;
   let stepLabel = "ICP only";
@@ -133,7 +133,7 @@ export function applyHardFilters(seeker: Seeker, pool: Candidate[]) {
         return false;
       return true;
     });
-    if (filtered.length >= 2) {
+    if (filtered.length >= minimum) {
       survivors = filtered;
       stepLabel = step.label;
       break;
@@ -145,15 +145,17 @@ export function applyHardFilters(seeker: Seeker, pool: Candidate[]) {
   const childFiltered = survivors.filter((candidate) =>
     childCompatible(seeker.childStatus, candidate.childStatus),
   );
-  if (childFiltered.length >= 2) {
+  if (childFiltered.length >= minimum) {
     return { survivors: childFiltered, stepLabel: `${stepLabel} · child status matched`, hobbyOnly: false };
   }
 
-  if (survivors.length >= 2) return { survivors, stepLabel, hobbyOnly: false };
+  if (survivors.length >= minimum) return { survivors, stepLabel, hobbyOnly: false };
 
   // Hobby-only mode: drop ICP, keep age ±5, rank on life context + interests.
   const hobby = pool.filter((candidate) => withinAge(seeker, candidate, 5));
-  return { survivors: hobby, stepLabel: "Hobby-only mode (ICP dropped, age ±5)", hobbyOnly: true };
+  if (hobby.length > survivors.length)
+    return { survivors: hobby, stepLabel: "Hobby-only mode (life-stage dropped, age ±5)", hobbyOnly: true };
+  return { survivors, stepLabel, hobbyOnly: false };
 }
 
 function stageScore(seeker: Seeker, candidate: Candidate) {
