@@ -275,7 +275,8 @@ function roleDescriptor(roleLabel: string | null, expertise: string | null) {
   const role = roleLabel.toLowerCase();
   if (role.includes("founder")) return `runs her own business${field}`;
   if (role.includes("c-suite")) return `sits in the C-suite${field}`;
-  if (role.includes("between roles")) return `is between roles right now${expertise ? `, with a background in ${expertise}` : ""}`;
+  if (role.includes("between roles"))
+    return expertise ? `is between roles with a background in ${expertise}` : "is between roles right now";
   if (role.includes("director") || role.includes("vp")) return `leads at director level${field}`;
   if (role.includes("individual contributor")) {
     return `is ${role.startsWith("senior") ? "a senior specialist" : "a specialist"}${field}`;
