@@ -1,21 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useRef, useState } from "react";
+import confetti from "canvas-confetti";
+import { Check, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import podiumMark from "@/assets/podium-mark.png";
+import chatMark from "@/assets/podium-chat-mark.png.asset.json";
+import podiumLogo from "@/assets/podium-logo-wordmark-white.png.asset.json";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
 import { MatchCard } from "@/components/intake/MatchCard";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
 import {
   BUSINESS_TYPE,
   BUSINESS_TYPE_ICPS,
   FOUNDER_LENGTH,
   GATES,
   GATE_YES_TARGET,
-  ICP_LABELS,
   ICP_OPTIONS,
   LIFE_CONTEXT_OPTIONS,
   LIFE_CONTEXT_PROMPT,
@@ -33,13 +35,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Answer a short set of questions about where you are in your career and life, and see the three Podium members you'd be introduced to — with the reasoning behind each match.",
+          "Answer a short set of questions about where you are in your career and life, and see the three Podium members you'd be introduced to.",
       },
       { property: "og:title", content: "Podium Introductions — Find your three matches" },
       {
         property: "og:description",
         content:
-          "A live demo of Podium's introductions engine: a short intake conversation, then three real member matches with scoring shown.",
+          "A live demo of Podium's introductions engine: a short conversation, then three real member matches.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -123,45 +125,100 @@ function visitorId() {
 }
 
 function Index() {
+  const [sessionKey, setSessionKey] = useState(0);
+
+  return (
+    <main className="mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden px-4 sm:px-8">
+      <header className="-mx-4 flex shrink-0 items-center justify-between gap-3 border-b border-foreground/10 bg-foreground px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:-mx-8 sm:px-8 sm:py-5">
+        <img
+          src={podiumLogo.url}
+          alt="Podium"
+          width={587}
+          height={170}
+          className="h-6 w-auto max-w-[7.5rem] object-contain sm:h-8 sm:max-w-[9rem]"
+        />
+        <button
+          type="button"
+          onClick={() => setSessionKey((current) => current + 1)}
+          className="shrink-0 text-xs text-background/70 underline-offset-4 transition-colors hover:text-background hover:underline"
+        >
+          Start over
+        </button>
+      </header>
+      <IntakeChat key={sessionKey} />
+    </main>
+  );
+}
+
+function IntakeChat() {
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [step, setStep] = useState<StepId>("name");
   const [pendingTarget, setPendingTarget] = useState<"founder_length" | null>(null);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [draft, setDraft] = useState("");
   const [multi, setMulti] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
+  const [dockVisible, setDockVisible] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     matches: PublicMatch[];
     profileFound: boolean;
     poolSizes: { routeA: number; routeB: number };
   } | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockKey, setDockKey] = useState(0);
   const run = useServerFn(submitIntake);
   const lookup = useServerFn(lookupMember);
 
   const prompt = useMemo(() => promptFor(step, answers), [step, answers]);
 
+  useEffect(
+    () => () => {
+      timers.current.forEach(clearTimeout);
+    },
+    [],
+  );
+
   useEffect(() => {
-    setBubbles([
-      {
-        role: "bot",
-        id: "intro",
-        text: "Hi — I'm the Podium introductions assistant. A few questions about where you are in your career and life, and I'll show you the three members we'd introduce you to.",
-      },
-      { role: "bot", id: "first-question", text: "First — what's your name?" },
+    if (!dockVisible) return;
+    setDockKey((current) => current + 1);
+    dockRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [dockVisible, step]);
+
+  const say = useCallback((role: Bubble["role"], text: string) => {
+    setBubbles((current) => [
+      ...current,
+      { role, text, id: `${role}-${current.length}-${Date.now()}` },
     ]);
   }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [bubbles, result, loading]);
+  const botSay = useCallback(
+    (text: string, next?: () => void, delay = 550) => {
+      setTyping(true);
+      const timer = setTimeout(() => {
+        setTyping(false);
+        say("bot", text);
+        next?.();
+      }, delay);
+      timers.current.push(timer);
+    },
+    [say],
+  );
 
-  const progress = (ORDER.indexOf(step) / (ORDER.length - 1)) * 100;
+  const start = () => {
+    setHasStarted(true);
+    botSay(
+      "Hi — I'm the Podium introductions assistant. A few quick questions, and I'll show you the three members we'd introduce you to.",
+      () => botSay("First — what's your name?", () => setDockVisible(true), 600),
+      350,
+    );
+  };
 
-  function say(role: Bubble["role"], text: string) {
-    setBubbles((current) => [...current, { role, text, id: `${role}-${current.length}-${text.slice(0, 12)}` }]);
-  }
+  const progressTotal =
+    3 + (answers.icp ? 1 : 1) + 3 + (answers.icp && BUSINESS_TYPE_ICPS.includes(answers.icp) ? 1 : 0);
+  const answered = bubbles.filter((bubble) => bubble.role === "user").length;
 
   function nextStep(from: StepId, next: Answers, target: "founder_length" | null) {
     let index = ORDER.indexOf(from) + 1;
@@ -171,7 +228,10 @@ function Index() {
         index += 1;
         continue;
       }
-      if (candidate === "reroute" && !(next.gateAnswer === "no" && next.initialIcp && REROUTES[next.initialIcp])) {
+      if (
+        candidate === "reroute" &&
+        !(next.gateAnswer === "no" && next.initialIcp && REROUTES[next.initialIcp])
+      ) {
         index += 1;
         continue;
       }
@@ -192,24 +252,26 @@ function Index() {
     const next = { ...answers, ...update };
     setAnswers(next);
     setPendingTarget(target);
+    setDockVisible(false);
     say("user", echo);
-    setDraft("");
     setMulti([]);
     setError(null);
     const upcoming = nextStep(step, next, target ?? pendingTarget);
     setStep(upcoming);
-    if (upcoming === "results") void submit(next);
-    else {
-      const nextPrompt = promptFor(upcoming, next);
-      if (nextPrompt) say("bot", nextPrompt.question);
+    if (upcoming === "results") {
+      void submit(next);
+      return;
     }
+    const nextPrompt = promptFor(upcoming, next);
+    if (nextPrompt) botSay(nextPrompt.question, () => setDockVisible(true));
+    else setDockVisible(true);
   }
 
   async function submit(final: Answers) {
     setLoading(true);
     setError(null);
     try {
-      const transcript = [...bubbles].map(({ role, text }) => ({ role, text }));
+      const transcript = bubbles.map(({ role, text }) => ({ role, text }));
       const response = await run({
         data: {
           visitorId: visitorId(),
@@ -228,13 +290,13 @@ function Index() {
           transcript: transcript.slice(-100),
         },
       });
-      setResult(response);
       say(
         "bot",
         response.matches.length > 0
           ? `Here are the ${response.matches.length} members I'd introduce you to, ${final.name.split(" ")[0]}.`
-          : "I couldn't find a compatible match in the current pool yet — your profile is saved, and we'll match you as the pool grows.",
+          : "I couldn't find a compatible match in the current pool yet — your answers are saved, and we'll match you as the pool grows.",
       );
+      setResult(response);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong. Please try again.");
     } finally {
@@ -242,57 +304,43 @@ function Index() {
     }
   }
 
-  function submitText() {
-    const value = draft.trim();
-    if (step === "name") {
-      if (value.length < 2) return setError("Please tell me your name.");
-      return advance({ name: value }, value);
-    }
-    if (step === "email") {
-      if (!EMAIL_RE.test(value)) return setError("That email doesn't look right.");
-      return advance({ email: value }, value);
-    }
+  function handleText(value: string) {
+    if (step === "name") return advance({ name: value }, value);
+    if (step === "email") return advance({ email: value }, value);
     if (step === "phone") {
-      if (value.replace(/\D/g, "").length < 6) return setError("Please enter a reachable phone number.");
       void handlePhone(value);
       return undefined;
     }
-    if (step === "openText") {
-      return advance({ openText: value || null }, value || "(skipped)");
-    }
+    if (step === "openText") return advance({ openText: value || null }, value || "(skipped)");
     return undefined;
   }
 
   async function handlePhone(value: string) {
     const next = { ...answers, phone: value };
     setAnswers(next);
+    setDockVisible(false);
     say("user", value);
-    setDraft("");
     setError(null);
-    setLoading(true);
+    setTyping(true);
+    let found = false;
     try {
-      const found = await lookup({
+      const lookedUp = await lookup({
         data: { name: next.name, email: next.email, phone: value },
       });
-      if (found.found) {
-        const role = [found.roleLabel, found.expertise].filter(Boolean).join(" in ");
-        say(
-          "bot",
-          `Found you in the Podium membership directory${role ? ` — ${role}` : ""}. I'll use what's already on file, so I won't ask you to repeat your age, company, expertise or interests.`,
-        );
-      } else {
-        say(
-          "bot",
-          "I couldn't find you in the membership directory just yet — that's fine, I'll match you on the answers you give me here.",
-        );
-      }
+      found = lookedUp.found;
     } catch {
-      say("bot", "I'll match you on the answers you give me here.");
+      found = false;
     }
-    setLoading(false);
+    setTyping(false);
     setStep("icp");
     const nextPrompt = promptFor("icp", next);
-    if (nextPrompt) say("bot", nextPrompt.question);
+    const askIcp = () =>
+      nextPrompt ? botSay(nextPrompt.question, () => setDockVisible(true), 600) : setDockVisible(true);
+    if (found) {
+      botSay(`Lovely — good to have you back, ${next.name.split(" ")[0]}.`, askIcp, 450);
+    } else {
+      askIcp();
+    }
   }
 
   function chooseOption(option: { label: string; value: string }) {
@@ -335,161 +383,442 @@ function Index() {
     }
   }
 
-  function submitMulti() {
-    if (step === "lifeContext") {
-      const tags = multi.flatMap(
-        (label) => LIFE_CONTEXT_OPTIONS.find((entry) => entry.label === label)?.tags ?? [],
-      );
-      return advance({ lifeContext: [...new Set(tags)] }, multi.length ? multi.join(" · ") : "None of these");
-    }
-    return undefined;
+  function submitMulti(selected: string[]) {
+    if (step !== "lifeContext") return;
+    const tags = selected.flatMap(
+      (label) => LIFE_CONTEXT_OPTIONS.find((entry) => entry.label === label)?.tags ?? [],
+    );
+    advance(
+      { lifeContext: [...new Set(tags)] },
+      selected.length ? selected.join(" · ") : "None of these",
+    );
   }
 
   const isMulti = step === "lifeContext";
   const isText = ["name", "email", "phone", "openText"].includes(step);
+  const showDock = dockVisible && !typing && !loading && !result && Boolean(prompt);
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-6">
-        <header className="flex items-center gap-3 pb-4">
-          <img src={podiumMark} alt="Podium" className="h-9 w-9 rounded-full object-cover" />
-          <div className="flex-1">
-            <h1 className="font-display text-xl leading-none text-foreground">
-              Podium Introductions
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Intake demo · matched against the live membership database
-            </p>
-          </div>
-          {answers.icp && (
-            <Badge variant="secondary" className="hidden sm:inline-flex">
-              {ICP_LABELS[answers.icp]}
-            </Badge>
-          )}
-        </header>
+    <>
+      {hasStarted ? (
+        <ProgressBar answered={answered} total={progressTotal} done={Boolean(result)} />
+      ) : null}
 
-        <Progress value={result ? 100 : progress} className="h-1" />
-
-        <section className="flex-1 space-y-4 py-6" aria-live="polite">
-          {bubbles.map((bubble) => (
-            <div
-              key={bubble.id}
-              className={bubble.role === "bot" ? "flex justify-start" : "flex justify-end"}
-            >
-              <p
-                className={
-                  bubble.role === "bot"
-                    ? "max-w-[85%] rounded-2xl rounded-bl-sm bg-card px-4 py-3 text-sm text-card-foreground"
-                    : "max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-sm text-primary-foreground"
-                }
-              >
-                {bubble.text}
+      <Conversation className="min-h-0 flex-1">
+        <ConversationContent className="gap-5 px-0 py-8" aria-live="polite">
+          {!hasStarted ? (
+            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center duration-500 animate-in fade-in">
+              <img
+                src={chatMark.url}
+                alt=""
+                width={324}
+                height={243}
+                className="mb-7 size-16 rounded-full object-cover shadow-sm"
+              />
+              <p className="max-w-xs font-display text-3xl leading-tight text-foreground">
+                Meet the women in Podium who are where you are
               </p>
-            </div>
-          ))}
-
-          {loading && (
-            <p className="text-sm text-muted-foreground">One moment…</p>
-          )}
-
-          {result && (
-            <div className="space-y-4 pt-2">
-              {result.matches.map((match, index) => (
-                <MatchCard key={match.id} match={match} rank={index + 1} />
-              ))}
-              <p className="text-center text-xs text-muted-foreground">
-                Chosen from {result.poolSizes.routeB} members in the Podium membership directory.
-              </p>
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </section>
-
-        {!result && !loading && (
-          <div className="sticky bottom-0 space-y-3 border-t border-border bg-background pt-4 pb-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
-
-            {isText && prompt && (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submitText();
-                }}
-                className="flex gap-2"
+              <button
+                type="button"
+                onClick={start}
+                className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5 hover:opacity-90 active:translate-y-0"
               >
-                {step === "openText" ? (
-                  <Textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Say as much or as little as you like"
-                    rows={3}
-                    autoFocus
-                  />
-                ) : (
-                  <Input
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder={prompt.placeholder}
-                    type={step === "email" ? "email" : step === "phone" ? "tel" : "text"}
-                    autoFocus
-                  />
-                )}
-                <Button type="submit">Send</Button>
-              </form>
-            )}
+                Start here
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          ) : null}
 
-            {!isText && prompt && !isMulti && (
-              <div className="flex flex-col gap-2">
-                {prompt.options.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant="outline"
-                    className="h-auto justify-start whitespace-normal py-3 text-left text-sm"
-                    onClick={() => chooseOption(option)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-            )}
-
-            {isMulti && prompt && (
-              <div className="space-y-3">
-                <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
-                  {prompt.options.map((option) => {
-                    const selected = multi.includes(option.value);
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() =>
-                          setMulti((current) =>
-                            selected
-                              ? current.filter((item) => item !== option.value)
-                              : [...current, option.value],
-                          )
-                        }
-                        aria-pressed={selected}
-                        className={
-                          selected
-                            ? "rounded-full bg-primary px-3 py-1.5 text-xs text-primary-foreground"
-                            : "rounded-full border border-border px-3 py-1.5 text-xs text-foreground hover:bg-secondary"
-                        }
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
+          {bubbles.map((bubble, index) => {
+            if (bubble.role === "bot") {
+              const continues = bubbles[index - 1]?.role === "bot";
+              return (
+                <div
+                  key={bubble.id}
+                  className={`flex max-w-[88%] items-end gap-2 duration-500 animate-in fade-in slide-in-from-bottom-2 ${
+                    continues ? "-mt-3" : ""
+                  }`}
+                >
+                  {continues ? (
+                    <span aria-hidden="true" className="size-7 shrink-0" />
+                  ) : (
+                    <img
+                      src={chatMark.url}
+                      alt="Podium"
+                      width={324}
+                      height={243}
+                      className="size-7 shrink-0 rounded-full object-cover"
+                    />
+                  )}
+                  <p className="whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-card px-4 py-3 text-sm leading-relaxed text-foreground shadow-sm">
+                    {bubble.text}
+                  </p>
                 </div>
-                <Button onClick={submitMulti} className="w-full">
-                  {multi.length > 0 ? `Continue with ${multi.length} selected` : "Continue"}
-                </Button>
+              );
+            }
+            return (
+              <div
+                key={bubble.id}
+                className="ml-auto flex max-w-[88%] flex-wrap justify-end gap-2 duration-500 animate-in fade-in slide-in-from-bottom-2"
+              >
+                <span className="rounded-2xl rounded-br-sm bg-primary px-4 py-2 text-sm text-primary-foreground shadow-sm">
+                  {bubble.text}
+                </span>
               </div>
-            )}
-          </div>
-        )}
+            );
+          })}
+
+          {typing || loading ? <TypingBubble /> : null}
+
+          {result ? <ResultsPanel result={result} /> : null}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+
+      <div
+        ref={dockRef}
+        className={`-mx-4 flex max-h-[56dvh] shrink-0 flex-col rounded-t-3xl border-t border-border bg-card/85 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md transition-shadow sm:-mx-8 sm:px-8 ${
+          showDock ? "shadow-[0_-14px_40px_-26px_rgba(50,48,46,0.7)]" : ""
+        }`}
+      >
+        {showDock ? (
+          <span
+            aria-hidden="true"
+            className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-border"
+          />
+        ) : null}
+
+        <div className="flex min-h-0 flex-1 flex-col pb-1 pt-2">
+          {error ? <p className="pb-2 text-sm text-destructive">{error}</p> : null}
+
+          {showDock && isText && prompt ? (
+            <TextAnswer
+              key={dockKey}
+              step={step}
+              placeholder={prompt.placeholder ?? "Type your answer"}
+              onSubmit={handleText}
+              onError={setError}
+            />
+          ) : null}
+
+          {showDock && !isText && !isMulti && prompt ? (
+            <SingleSelect key={dockKey} options={prompt.options} onSelect={chooseOption} />
+          ) : null}
+
+          {showDock && isMulti && prompt ? (
+            <MultiSelect
+              key={dockKey}
+              options={prompt.options.map((option) => option.label)}
+              selected={multi}
+              onChange={setMulti}
+              onSubmit={submitMulti}
+            />
+          ) : null}
+        </div>
       </div>
-    </main>
+    </>
+  );
+}
+
+function validateText(step: StepId, value: string): string | null {
+  if (step === "name") return value.trim().length > 1 ? null : "Please add your name";
+  if (step === "email") return EMAIL_RE.test(value.trim()) ? null : "That email doesn't look right";
+  if (step === "phone")
+    return value.trim().replace(/\D/g, "").length >= 6 ? null : "Please add a valid phone number";
+  return null;
+}
+
+function TextAnswer({
+  step,
+  placeholder,
+  onSubmit,
+  onError,
+}: {
+  step: StepId;
+  placeholder: string;
+  onSubmit: (value: string) => void;
+  onError: (message: string | null) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const problem = validateText(step, value);
+        if (problem) {
+          onError(problem);
+          return;
+        }
+        onError(null);
+        onSubmit(value.trim());
+      }}
+      className="flex flex-col gap-2"
+    >
+      <DockHint>{step === "openText" ? "Say as much or as little as you like" : "Type your answer"}</DockHint>
+      <div className="flex items-center gap-2">
+        {step === "openText" ? (
+          <textarea
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              onError(null);
+            }}
+            rows={3}
+            placeholder={placeholder}
+            autoFocus
+            className="w-full flex-1 resize-none rounded-2xl border border-border bg-card px-4 py-3 text-base text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+          />
+        ) : (
+          <input
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              onError(null);
+            }}
+            type={step === "email" ? "email" : step === "phone" ? "tel" : "text"}
+            inputMode={step === "phone" ? "tel" : step === "email" ? "email" : "text"}
+            autoComplete={step === "name" ? "name" : step === "email" ? "email" : step === "phone" ? "tel" : "off"}
+            placeholder={placeholder}
+            autoFocus
+            className="min-h-12 w-full flex-1 rounded-2xl border border-border bg-card px-4 py-3 text-base text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+          />
+        )}
+        <button
+          type="submit"
+          aria-label="Send"
+          className="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:translate-y-0"
+        >
+          <ChevronRight className="size-5" />
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function SingleSelect({
+  options,
+  onSelect,
+}: {
+  options: { label: string; value: string }[];
+  onSelect: (option: { label: string; value: string }) => void;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+
+  const pick = (option: { label: string; value: string }) => {
+    if (chosen) return;
+    setChosen(option.value);
+    setTimeout(() => onSelect(option), 220);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-col gap-2">
+      <DockHint>Tap the one that fits</DockHint>
+      <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-1 pb-1 [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]">
+        {options.map((option, index) => {
+          const active = chosen === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => pick(option)}
+              style={{ animationDelay: `${index * 45}ms` }}
+              className={`group flex min-h-14 shrink-0 items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left shadow-sm transition-all duration-200 fill-mode-backwards animate-in fade-in slide-in-from-bottom-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:scale-[0.99] ${
+                active
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-card hover:-translate-y-0.5 hover:border-primary"
+              } ${chosen && !active ? "opacity-40" : ""}`}
+            >
+              <span className="min-w-0 text-sm text-foreground group-hover:text-primary">
+                {option.label}
+              </span>
+              <span
+                aria-hidden="true"
+                className={`grid size-8 shrink-0 place-items-center rounded-full transition-all duration-200 ${
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
+                }`}
+              >
+                {active ? <Check className="size-4" /> : <ChevronRight className="size-4" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MultiSelect({
+  options,
+  selected,
+  onChange,
+  onSubmit,
+}: {
+  options: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  onSubmit: (selected: string[]) => void;
+}) {
+  const toggle = (option: string) =>
+    onChange(
+      selected.includes(option)
+        ? selected.filter((item) => item !== option)
+        : [...selected, option],
+    );
+
+  return (
+    <div className="flex min-h-0 flex-col gap-3">
+      <DockHint>
+        Pick as many as fit{selected.length ? ` — ${selected.length} chosen` : ""}
+      </DockHint>
+      <div className="-mx-1 flex min-h-0 flex-1 flex-wrap content-start gap-2 overflow-y-auto overscroll-contain px-1 pb-1 [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]">
+        {options.map((option, index) => {
+          const active = selected.includes(option);
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => toggle(option)}
+              aria-pressed={active}
+              style={{ animationDelay: `${index * 25}ms` }}
+              className={`min-h-12 rounded-full border px-4 py-2.5 text-sm shadow-sm transition-all duration-200 fill-mode-backwards animate-in fade-in zoom-in-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:scale-[0.97] ${
+                active
+                  ? "scale-[1.02] border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-foreground hover:-translate-y-0.5 hover:border-primary hover:text-primary"
+              }`}
+            >
+              {active ? "✓ " : ""}
+              {option}
+            </button>
+          );
+        })}
+      </div>
+      <div className="shrink-0 border-t border-border/60 pt-3">
+        <button
+          type="button"
+          onClick={() => onSubmit(selected)}
+          className="min-h-13 w-full rounded-full bg-primary px-6 py-3.5 text-sm text-primary-foreground shadow-sm transition-all duration-300 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:scale-[0.99]"
+        >
+          {selected.length ? `Continue with ${selected.length} selected` : "None of these"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DockHint({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{children}</p>
+  );
+}
+
+function ProgressBar({
+  answered,
+  total,
+  done,
+}: {
+  answered: number;
+  total: number;
+  done: boolean;
+}) {
+  const steps = Math.max(total, 1);
+  const filled = done ? steps : Math.min(answered, steps);
+  return (
+    <div className="flex items-center gap-3 pt-3">
+      <div className="flex flex-1 gap-1" role="presentation">
+        {Array.from({ length: steps }, (_, index) => (
+          <span
+            key={index}
+            className={`h-1 flex-1 rounded-full transition-all duration-500 ease-out ${
+              index < filled ? "bg-primary" : "bg-muted"
+            } ${index === filled - 1 ? "scale-y-[2]" : ""}`}
+          />
+        ))}
+      </div>
+      <span className="shrink-0 text-[11px] tabular-nums tracking-[0.08em] text-muted-foreground">
+        {done ? `${steps} / ${steps}` : `${Math.min(filled + 1, steps)} / ${steps}`}
+      </span>
+    </div>
+  );
+}
+
+function TypingBubble() {
+  return (
+    <div className="flex items-end gap-2 duration-300 animate-in fade-in">
+      <img
+        src={chatMark.url}
+        alt="Podium"
+        width={324}
+        height={243}
+        className="size-7 shrink-0 rounded-full object-cover"
+      />
+      <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-card px-4 py-3.5 shadow-sm">
+        {[0, 1, 2].map((dot) => (
+          <span
+            key={dot}
+            style={{ animationDelay: `${dot * 160}ms` }}
+            className="size-1.5 animate-bounce rounded-full bg-primary/60"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResultsPanel({
+  result,
+}: {
+  result: { matches: PublicMatch[]; poolSizes: { routeA: number; routeB: number } };
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setRevealed(true), 700);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (result.matches.length === 0) return;
+    const fire = (ratio: number, options: confetti.Options) =>
+      confetti({
+        ...options,
+        origin: { y: 0.7 },
+        particleCount: Math.floor(160 * ratio),
+        colors: ["#CC4900", "#E8A87C", "#32302E", "#FDFDF7"],
+        disableForReducedMotion: true,
+      });
+    fire(0.25, { spread: 26, startVelocity: 55 });
+    fire(0.35, { spread: 60 });
+    fire(0.2, { spread: 120, decay: 0.91, scalar: 0.8 });
+  }, [result.matches.length]);
+
+  return (
+    <div className="space-y-4 duration-500 animate-in fade-in">
+      {revealed ? (
+        result.matches.map((match, index) => (
+          <div
+            key={match.id}
+            style={{ animationDelay: `${index * 80}ms` }}
+            className="duration-500 fill-mode-backwards animate-in fade-in slide-in-from-bottom-2"
+          >
+            <MatchCard match={match} rank={index + 1} />
+          </div>
+        ))
+      ) : (
+        <div className="flex flex-col gap-3" aria-hidden="true">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="h-32 animate-pulse rounded-2xl bg-muted" />
+          ))}
+        </div>
+      )}
+      {result.matches.length > 0 ? (
+        <p className="text-center text-xs text-muted-foreground">
+          Chosen from {result.poolSizes.routeB} members in the Podium membership directory.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -505,9 +834,17 @@ function promptFor(step: StepId, answers: Answers): Prompt | null {
     case "name":
       return { question: "First — what's your name?", placeholder: "Your full name", options: [] };
     case "email":
-      return { question: "What email should we use for your introductions?", placeholder: "you@example.com", options: [] };
+      return {
+        question: "What email should we use for your introductions?",
+        placeholder: "you@example.com",
+        options: [],
+      };
     case "phone":
-      return { question: "And a phone number, so I can find your membership record?", placeholder: "+65 9123 4567", options: [] };
+      return {
+        question: "And a phone number we can reach you on?",
+        placeholder: "+65 9123 4567",
+        options: [],
+      };
     case "icp":
       return {
         question: "Which of these sounds most like you right now?",
@@ -528,12 +865,18 @@ function promptFor(step: StepId, answers: Answers): Prompt | null {
       return reroute
         ? {
             question: reroute.prompt,
-            options: reroute.options.map((option) => ({ label: option.label, value: option.label })),
+            options: reroute.options.map((option) => ({
+              label: option.label,
+              value: option.label,
+            })),
           }
         : null;
     }
     case "founderLength":
-      return { question: FOUNDER_LENGTH.prompt, options: asOptions(FOUNDER_LENGTH.options.map((o) => o.label)) };
+      return {
+        question: FOUNDER_LENGTH.prompt,
+        options: asOptions(FOUNDER_LENGTH.options.map((option) => option.label)),
+      };
     case "stage":
       return answers.icp
         ? { question: STAGES[answers.icp].prompt, options: asOptions(STAGES[answers.icp].options) }
@@ -541,7 +884,7 @@ function promptFor(step: StepId, answers: Answers): Prompt | null {
     case "businessType":
       return { question: BUSINESS_TYPE.prompt, options: asOptions(BUSINESS_TYPE.options) };
     case "openText":
-      return { question: OPEN_TEXT_PROMPT, options: [] };
+      return { question: OPEN_TEXT_PROMPT, placeholder: "Anything you'd like to add", options: [] };
     case "lifeContext":
       return {
         question: LIFE_CONTEXT_PROMPT,
