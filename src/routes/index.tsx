@@ -190,6 +190,7 @@ function Index() {
         id: "intro",
         text: "Hi — I'm the Podium introductions assistant. A few questions about where you are in your career and life, and I'll show you the three members we'd introduce you to.",
       },
+      { role: "bot", id: "first-question", text: "First — what's your name?" },
     ]);
   }, []);
 
