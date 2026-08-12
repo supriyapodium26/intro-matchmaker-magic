@@ -4,7 +4,7 @@ import confetti from "canvas-confetti";
 import { Check, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import podiumMark from "@/assets/podium-mark.png";
+import podiumLogo from "@/assets/podium-logo.png.asset.json";
 import {
   Conversation,
   ConversationContent,
