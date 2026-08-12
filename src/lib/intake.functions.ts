@@ -122,15 +122,15 @@ function profileFrom(row: MemberRow): MemberProfile {
  * Finds the member record behind the contact details the visitor typed, so the
  * chat never has to ask for age, role, company, expertise, countries or interests.
  */
+type QueryLike = {
+  select: (columns: string) => {
+    ilike: (column: string, value: string) => PromiseLike<{ data: MemberRow[] | null }>;
+  };
+};
+type AdminLike = { from: (table: string) => QueryLike };
+
 async function findMemberRow(
-  supabaseAdmin: {
-    from: (table: string) => {
-      select: (columns: string) => {
-        ilike: (column: string, value: string) => Promise<{ data: MemberRow[] | null }>;
-        select?: unknown;
-      };
-    };
-  },
+  supabaseAdmin: AdminLike,
   contact: { name: string; email: string; phone: string },
 ) {
   const byEmail = await supabaseAdmin.from("members").select(MEMBER_COLUMNS).ilike("email", contact.email);
@@ -187,7 +187,7 @@ export const lookupMember = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => contactSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { row, matchedOn } = await findMemberRow(supabaseAdmin as never, data);
+    const { row, matchedOn } = await findMemberRow(supabaseAdmin as unknown as AdminLike, data);
     if (!row) return { found: false as const };
     const profile = profileFrom(row);
     return {
@@ -207,7 +207,7 @@ export const submitIntake = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { row: memberRow } = await findMemberRow(supabaseAdmin as never, data);
+    const { row: memberRow } = await findMemberRow(supabaseAdmin as unknown as AdminLike, data);
     const profile = memberRow ? profileFrom(memberRow) : EMPTY_PROFILE;
     const birthYear = profile.age ? new Date().getFullYear() - profile.age : null;
 
@@ -253,7 +253,7 @@ export const submitIntake = createServerFn({ method: "POST" })
       supabaseAdmin
         .from("respondents")
         .select(
-          "id, name, icp, birth_year, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests, stage_index, stage_label, business_type",
+          "id, name, email, icp, birth_year, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests, stage_index, stage_label, business_type",
         )
         .eq("completed", true)
         .neq("id", inserted.id),
