@@ -1,7 +1,7 @@
 // Pure matching engine: hard-filter cascade + weighted scoring, per the algorithm doc.
 
 import type { IcpKey } from "@/lib/intake-tree";
-import { LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
+import { HOME_COUNTRY, ICP_WARM_PHRASE, LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
 import { countryName } from "@/lib/countries";
 import {
   CHILDFREE_STATUSES,
