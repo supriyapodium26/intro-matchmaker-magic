@@ -3,10 +3,9 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ICP_LABELS, LIFE_CONTEXT_TAG_LABELS, COUNTRY_OPTIONS } from "@/lib/intake-tree";
+import { countryName } from "@/lib/countries";
+import { ICP_LABELS, LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
 import type { PublicMatch } from "@/lib/intake.functions";
-
-const COUNTRY_NAMES = new Map(COUNTRY_OPTIONS.map((entry) => [entry.code, entry.label]));
 
 export function MatchCard({ match, rank }: { match: PublicMatch; rank: number }) {
   const [open, setOpen] = useState(false);
@@ -60,7 +59,7 @@ export function MatchCard({ match, rank }: { match: PublicMatch; rank: number })
         ))}
         {match.countries.slice(0, 3).map((code) => (
           <Badge key={code} variant="outline">
-            {COUNTRY_NAMES.get(code) ?? code}
+            {countryName(code)}
           </Badge>
         ))}
       </div>

@@ -2,6 +2,7 @@
 
 import type { IcpKey } from "@/lib/intake-tree";
 import { LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
+import { countryName } from "@/lib/countries";
 import {
   CHILDFREE_STATUSES,
   COUNTRY_FALLBACK_CAP,
@@ -215,7 +216,9 @@ export function scoreCandidate(
   const countries = countryScore(seeker.countries, candidate.countries);
   parts.push({ dimension: "countries", score: countries.score });
   if (countries.shared.length > 0) {
-    reasons.push(`You've both lived in ${countries.shared.slice(0, 2).join(", ")}`);
+    reasons.push(
+      `You've both lived in ${countries.shared.slice(0, 2).map(countryName).join(", ")}`,
+    );
   }
 
   // Route B members carry no stage/business-type answers, so they are scored on
