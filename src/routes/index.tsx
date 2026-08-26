@@ -11,6 +11,7 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { MatchCard } from "@/components/intake/MatchCard";
+import { Button } from "@/components/ui/button";
 import {
   BUSINESS_TYPE,
   BUSINESS_TYPE_ICPS,
