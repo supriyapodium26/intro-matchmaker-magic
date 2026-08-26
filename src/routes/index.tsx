@@ -11,6 +11,7 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { MatchCard } from "@/components/intake/MatchCard";
+import { Button } from "@/components/ui/button";
 import {
   BUSINESS_TYPE,
   BUSINESS_TYPE_ICPS,
@@ -165,6 +166,8 @@ function IntakeChat() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     matches: PublicMatch[];
+    looseMatches: PublicMatch[];
+    wildcards: PublicMatch[];
     profileFound: boolean;
     poolSizes: { routeA: number; routeB: number };
   } | null>(null);
@@ -767,9 +770,16 @@ function TypingBubble() {
 function ResultsPanel({
   result,
 }: {
-  result: { matches: PublicMatch[]; poolSizes: { routeA: number; routeB: number } };
+  result: {
+    matches: PublicMatch[];
+    looseMatches: PublicMatch[];
+    wildcards: PublicMatch[];
+    poolSizes: { routeA: number; routeB: number };
+  };
 }) {
   const [revealed, setRevealed] = useState(false);
+  const [showLoose, setShowLoose] = useState(false);
+  const [showWildcards, setShowWildcards] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setRevealed(true), 700);
@@ -810,6 +820,43 @@ function ResultsPanel({
           ))}
         </div>
       )}
+      {revealed && showLoose && result.looseMatches.length > 0 ? (
+        <div className="space-y-4">
+          <p className="text-center text-xs text-muted-foreground">
+            Tier 2 — looser matches. Fewer things line up, but they could still be worth a coffee.
+          </p>
+          {result.looseMatches.map((match, index) => (
+            <MatchCard key={match.id} match={match} rank={index + 4} tier="loose" />
+          ))}
+        </div>
+      ) : null}
+
+      {revealed && showWildcards && result.wildcards.length > 0 ? (
+        <div className="space-y-4">
+          <p className="text-center text-xs text-muted-foreground">
+            Different chapters of life, but a lot in common outside of work.
+          </p>
+          {result.wildcards.map((match, index) => (
+            <MatchCard key={match.id} match={match} rank={index + 1} tier="wildcard" />
+          ))}
+        </div>
+      ) : null}
+
+      {revealed && (result.looseMatches.length > 0 || result.wildcards.length > 0) ? (
+        <div className="flex flex-wrap justify-center gap-2">
+          {result.looseMatches.length > 0 && !showLoose ? (
+            <Button variant="outline" onClick={() => setShowLoose(true)}>
+              Expand list (tier 2 · looser matches)
+            </Button>
+          ) : null}
+          {result.wildcards.length > 0 && !showWildcards ? (
+            <Button variant="ghost" onClick={() => setShowWildcards(true)}>
+              Not quite right? Suggest interesting profiles
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       {result.matches.length > 0 ? (
         <p className="text-center text-xs text-muted-foreground">
           Chosen from {result.poolSizes.routeB} members in the Podium membership directory.

@@ -354,6 +354,42 @@ export function findMatches(
   return combined.slice(0, limit);
 }
 
+/**
+ * "Interesting profiles" — a deliberately loose, curiosity-driven list used when
+ * someone isn't taken with their three introductions. Life-stage filters are
+ * dropped entirely and ranking is purely on shared interests, life context and
+ * countries lived.
+ */
+export function findWildcards(
+  seeker: Seeker,
+  pool: Candidate[],
+  excludeIds: Set<string>,
+  limit = 3,
+): Match[] {
+  return pool
+    .filter((candidate) => !excludeIds.has(candidate.id))
+    .map((candidate) => {
+      const { score, breakdown, reasons, headline } = scoreCandidate(seeker, candidate, {
+        hobbyOnly: true,
+        collectsBusinessType: false,
+      });
+      return {
+        candidate,
+        score,
+        band: bandOf(score),
+        route: candidate.route,
+        filterStep: "Interesting profiles (shared interests and life context)",
+        breakdown,
+        headline,
+        reasons,
+        hobbyOnly: true,
+      } satisfies Match;
+    })
+    .filter((match) => match.reasons.length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 export function ageFromDob(dob: string | null) {
   if (!dob) return null;
   const born = new Date(dob);
