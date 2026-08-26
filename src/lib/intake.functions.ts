@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import type { IcpKey } from "@/lib/intake-tree";
 import { BUSINESS_TYPE_ICPS } from "@/lib/intake-tree";
-import { ageFromDob, findMatches, type Candidate, type Seeker } from "@/lib/matching/engine";
+import { ageFromDob, findMatches, findWildcards, type Candidate, type Match, type Seeker } from "@/lib/matching/engine";
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -292,20 +292,24 @@ export const submitIntake = createServerFn({ method: "POST" })
       businessType: data.businessType,
     };
 
-    const matches = findMatches(
+    const ranked = findMatches(
       seeker,
       routeA,
       routeB,
       BUSINESS_TYPE_ICPS.includes(seeker.icp),
-      3,
+      6,
     );
+    const matches = ranked.slice(0, 3);
+    const looseMatches = ranked.slice(3, 6);
+    const excludeIds = new Set(ranked.map((match) => match.candidate.id));
+    const wildcards = findWildcards(seeker, [...routeA, ...routeB], excludeIds, 3);
 
     await supabaseAdmin
       .from("respondents")
       .update({ match_count: matches.length, updated_at: new Date().toISOString() })
       .eq("id", inserted.id);
 
-    const publicMatches: PublicMatch[] = matches.map((match) => ({
+    const toPublic = (match: Match): PublicMatch => ({
       id: match.candidate.id,
       displayName: firstNameAndInitial(match.candidate.name),
       route: match.route,
@@ -333,10 +337,12 @@ export const submitIntake = createServerFn({ method: "POST" })
         score: part.score,
         weight: part.weight,
       })),
-    }));
+    });
 
     return {
-      matches: publicMatches,
+      matches: matches.map(toPublic),
+      looseMatches: looseMatches.map(toPublic),
+      wildcards: wildcards.map(toPublic),
       profileFound: Boolean(memberRow),
       poolSizes: { routeA: routeA.length, routeB: routeB.length },
     };
