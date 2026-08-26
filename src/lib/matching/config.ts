@@ -4,18 +4,20 @@
 import type { IcpKey } from "@/lib/intake-tree";
 
 export const WEIGHTS = {
-  stage: 40,
-  businessType: 15,
-  expertise: 15,
-  lifeContext: 15,
-  interests: 10,
-  countries: 5,
+  stage: 35,
+  childStatus: 25,
+  businessType: 10,
+  expertise: 10,
+  lifeContext: 10,
+  interests: 7,
+  countries: 3,
 } as const;
 
 export type Dimension = keyof typeof WEIGHTS;
 
 export const DIMENSION_LABELS: Record<Dimension, string> = {
   stage: "Stage proximity",
+  childStatus: "Parenting season",
   businessType: "Business type",
   expertise: "Area of expertise",
   lifeContext: "Life context overlap",
@@ -142,10 +144,11 @@ export const COUNTRY_FALLBACK_CAP = 0.5;
 export const ROUTE_B_WEIGHTS = {
   stage: 0,
   businessType: 0,
-  expertise: 40,
-  lifeContext: 25,
-  interests: 20,
-  countries: 15,
+  childStatus: 45,
+  expertise: 25,
+  lifeContext: 15,
+  interests: 10,
+  countries: 5,
 } as const;
 
 export const THRESHOLDS: { min: number; band: string }[] = [
