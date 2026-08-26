@@ -66,6 +66,35 @@ export type Match = {
  * phrase it as a shared field or a role descriptor. */
 const VAGUE_EXPERTISE = ["entrepreneur", "entrepreneurship", "founder", "business owner"];
 
+type ChildGroup = "parent" | "childfree" | "exploring";
+
+const CHILD_STATUS_COPY: Record<string, { headline: string; reason: string }> = {
+  childfree: {
+    headline: "is also intentionally child-free",
+    reason: "You're both in a similar child-free life season",
+  },
+  exploring: {
+    headline: "is also thinking about parenthood",
+    reason: "You're both thinking about parenthood in this season",
+  },
+  parent_young: {
+    headline: "is also a mom of young kids",
+    reason: "You're both mothers of young children, so the day-to-day context will feel familiar",
+  },
+  parent_school: {
+    headline: "is also a mom of school-age kids",
+    reason: "You're both parenting school-age children alongside everything else you're building",
+  },
+  parent_teen: {
+    headline: "is also parenting older children",
+    reason: "You're both parenting older children in this season",
+  },
+  parent_multi: {
+    headline: "is also navigating motherhood across stages",
+    reason: "You're both balancing motherhood with a full professional life",
+  },
+};
+
 function meaningfulExpertise(value: string | null) {
   if (!value) return null;
   return VAGUE_EXPERTISE.includes(value.trim().toLowerCase()) ? null : value;
@@ -74,7 +103,7 @@ function meaningfulExpertise(value: string | null) {
 function jaccard(a: string[], b: string[]) {
   const setA = new Set(a);
   const setB = new Set(b);
-  if (setA.size === 0 || setB.size === 0) return { score: 0, shared: [] as string[] };
+  if (setA.size === 0 || setB.size === 0) return null;
   const shared = [...setA].filter((item) => setB.has(item));
   const union = new Set([...setA, ...setB]);
   return { score: shared.length / union.size, shared };
@@ -95,19 +124,52 @@ function countryScore(rawA: string[], rawB: string[]) {
   if (shared.length > 0) return { score: 1, shared };
   const breadthA = breadth(a);
   const breadthB = breadth(b);
-  if (breadthA === null || breadthB === null) return { score: 0, shared: [] as string[] };
+  if (breadthA === null || breadthB === null) return null;
   const raw = 1 - Math.abs(breadthA - breadthB);
   return { score: Math.min(raw, COUNTRY_FALLBACK_CAP), shared: [] as string[] };
 }
 
+function childGroup(value: string | null): ChildGroup | null {
+  if (!value) return null;
+  if (PARENT_STATUSES.includes(value)) return "parent";
+  if (CHILDFREE_STATUSES.includes(value)) return "childfree";
+  if (value === "exploring") return "exploring";
+  return null;
+}
+
 function childCompatible(a: string | null, b: string | null) {
-  if (!a || !b) return true;
-  const groupOf = (value: string) =>
-    PARENT_STATUSES.includes(value) ? "parent" : CHILDFREE_STATUSES.includes(value) ? "childfree" : null;
-  const groupA = groupOf(a);
-  const groupB = groupOf(b);
-  if (groupA === null || groupB === null) return true;
+  const groupA = childGroup(a);
+  if (groupA === null) return true;
+  const groupB = childGroup(b);
+  if (groupB === null) return false;
   return groupA === groupB;
+}
+
+function childStatusScore(seeker: Seeker, candidate: Candidate) {
+  const seekerGroup = childGroup(seeker.childStatus);
+  const candidateGroup = childGroup(candidate.childStatus);
+  if (seekerGroup === null || candidateGroup === null) return null;
+  if (seekerGroup !== candidateGroup) return 0;
+  if (seeker.childStatus === candidate.childStatus) return 1;
+  return seekerGroup === "parent" ? 0.8 : 0.9;
+}
+
+function childStatusReason(seeker: Seeker, candidate: Candidate) {
+  if (!seeker.childStatus || !candidate.childStatus) return null;
+  if (seeker.childStatus === candidate.childStatus) return CHILD_STATUS_COPY[candidate.childStatus]?.reason ?? null;
+  if (childGroup(seeker.childStatus) === "parent" && childGroup(candidate.childStatus) === "parent") {
+    return "You're both mothers, so there's a real shared layer to the season you're in";
+  }
+  return null;
+}
+
+function ageSimilarityScore(seeker: Seeker, candidate: Candidate) {
+  if (seeker.age === null || candidate.age === null) return null;
+  const gap = Math.abs(seeker.age - candidate.age);
+  if (gap <= 2) return 1;
+  if (gap <= 5) return 0.8;
+  if (gap <= 8) return 0.35;
+  return 0;
 }
 
 function withinAge(seeker: Seeker, candidate: Candidate, tolerance: number) {
@@ -127,11 +189,14 @@ function bandOf(score: number) {
 /** Stage 1 — hard filters, loosened one step at a time until enough candidates survive. */
 export function applyHardFilters(seeker: Seeker, pool: Candidate[], minimum = 3) {
   const sameIcp = pool.filter((candidate) => candidate.icp === seeker.icp);
-  let survivors = sameIcp;
-  let stepLabel = "ICP only";
+  const childMatched = sameIcp.filter((candidate) => childCompatible(seeker.childStatus, candidate.childStatus));
+  const childStatusIsKnown = childGroup(seeker.childStatus) !== null;
+  const basePool = childStatusIsKnown && childMatched.length > 0 ? childMatched : sameIcp;
+  let survivors = basePool;
+  let stepLabel = childStatusIsKnown && childMatched.length > 0 ? "ICP + parenting season" : "ICP only";
 
   for (const step of FILTER_STEPS) {
-    const filtered = sameIcp.filter((candidate) => {
+    const filtered = basePool.filter((candidate) => {
       if (!withinAge(seeker, candidate, step.age)) return false;
       if (step.role && !withinRole(seeker, candidate)) return false;
       if (
@@ -152,24 +217,28 @@ export function applyHardFilters(seeker: Seeker, pool: Candidate[], minimum = 3)
     });
     if (filtered.length >= minimum) {
       survivors = filtered;
-      stepLabel = step.label;
+      stepLabel = childStatusIsKnown && childMatched.length > 0 ? `${step.label} · parenting season` : step.label;
       break;
     }
-    survivors = sameIcp;
-    stepLabel = "ICP only (age/role/company filters relaxed)";
-  }
-
-  const childFiltered = survivors.filter((candidate) =>
-    childCompatible(seeker.childStatus, candidate.childStatus),
-  );
-  if (childFiltered.length >= minimum) {
-    return { survivors: childFiltered, stepLabel: `${stepLabel} · child status matched`, hobbyOnly: false };
+    if (filtered.length > 0) {
+      survivors = filtered;
+      stepLabel = childStatusIsKnown && childMatched.length > 0 ? `${step.label} · parenting season` : step.label;
+    } else if (basePool.length > 0) {
+      survivors = basePool;
+      stepLabel =
+        childStatusIsKnown && childMatched.length > 0
+          ? "ICP + parenting season (age/role/company filters relaxed)"
+          : "ICP only (age/role/company filters relaxed)";
+    }
   }
 
   if (survivors.length >= minimum) return { survivors, stepLabel, hobbyOnly: false };
 
   // Hobby-only mode: drop ICP, keep age ±5, rank on life context + interests.
-  const hobby = pool.filter((candidate) => withinAge(seeker, candidate, 5));
+  // If the seeker has a known parenting season, keep that as a non-negotiable
+  // compatibility constraint so non-parents don't outrank parent-to-parent fits.
+  const hobbyBase = childStatusIsKnown ? pool.filter((candidate) => childCompatible(seeker.childStatus, candidate.childStatus)) : pool;
+  const hobby = hobbyBase.filter((candidate) => withinAge(seeker, candidate, 5));
   if (hobby.length > survivors.length)
     return { survivors: hobby, stepLabel: "Hobby-only mode (life-stage dropped, age ±5)", hobbyOnly: true };
   return { survivors, stepLabel, hobbyOnly: false };
@@ -203,12 +272,24 @@ export function scoreCandidate(
     }
   }
 
+  const child = options.hobbyOnly ? null : childStatusScore(seeker, candidate);
+  if (child !== null) {
+    parts.push({ dimension: "childStatus", score: child });
+    const reason = childStatusReason(seeker, candidate);
+    if (child > 0 && reason) reasons.push(reason);
+  }
+
+  const age = options.hobbyOnly ? null : ageSimilarityScore(seeker, candidate);
+  if (age !== null) {
+    parts.push({ dimension: "ageSimilarity", score: age });
+  }
+
   if (!options.hobbyOnly && options.collectsBusinessType && seeker.businessType && candidate.businessType) {
     const same = seeker.businessType === candidate.businessType ? 1 : 0;
     parts.push({ dimension: "businessType", score: same });
     if (same)
       reasons.push(
-        `You're building the same kind of thing — ${candidate.businessType.split("—")[0]!.trim().toLowerCase()}`,
+        `You're building the same kind of thing — ${(candidate.businessType.split("—")[0] ?? candidate.businessType).trim().toLowerCase()}`,
       );
   }
 
@@ -220,22 +301,28 @@ export function scoreCandidate(
   }
 
   const life = jaccard(seeker.lifeContext, candidate.lifeContext);
-  parts.push({ dimension: "lifeContext", score: life.score });
-  if (life.shared.length > 0) {
-    const labels = life.shared.map((tag) => LIFE_CONTEXT_TAG_LABELS[tag] ?? tag);
-    reasons.push(`You're both ${labels.slice(0, 2).join(" and ")} — she'll get it without you explaining`);
+  if (life !== null) {
+    parts.push({ dimension: "lifeContext", score: life.score });
+    if (life.shared.length > 0) {
+      const labels = life.shared.map((tag) => LIFE_CONTEXT_TAG_LABELS[tag] ?? tag);
+      reasons.push(`You're both ${labels.slice(0, 2).join(" and ")} — she'll get it without you explaining`);
+    }
   }
 
   const interests = jaccard(seeker.interests, candidate.interests);
-  parts.push({ dimension: "interests", score: interests.score });
-  if (interests.shared.length > 0) {
-    reasons.push(`She's into ${listOf(interests.shared.slice(0, 3))} too`);
+  if (interests !== null) {
+    parts.push({ dimension: "interests", score: interests.score });
+    if (interests.shared.length > 0) {
+      reasons.push(`She's into ${listOf(interests.shared.slice(0, 3))} too`);
+    }
   }
 
   const countries = countryScore(seeker.countries, candidate.countries);
-  parts.push({ dimension: "countries", score: countries.score });
-  if (countries.shared.length > 0) {
-    reasons.push(`You've both lived in ${listOf(countries.shared.slice(0, 2).map(countryName))}`);
+  if (countries !== null) {
+    parts.push({ dimension: "countries", score: countries.score });
+    if (countries.shared.length > 0) {
+      reasons.push(`You've both lived in ${listOf(countries.shared.slice(0, 2).map(countryName))}`);
+    }
   }
 
   // Route B members carry no stage/business-type answers, so they are scored on
@@ -259,7 +346,8 @@ export function scoreCandidate(
 
 function listOf(items: string[]) {
   if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+  const final = items.at(-1) ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${final}`;
 }
 
 /** One warm sentence introducing the match, e.g. "Jovita is a manager in
@@ -273,6 +361,10 @@ function headlineFor(seeker: Seeker, candidate: Candidate) {
     const gap = Math.abs(seeker.age - candidate.age);
     if (gap <= 2) bits.push("is right around your age");
     else if (gap <= 5) bits.push("is close to your age");
+  }
+  if (seeker.childStatus && seeker.childStatus === candidate.childStatus) {
+    const childCopy = CHILD_STATUS_COPY[candidate.childStatus]?.headline;
+    if (childCopy) bits.push(childCopy);
   }
   bits.push(`is ${ICP_WARM_PHRASE[candidate.icp]}`);
   return `${first} ${listOf(bits)}.`;
@@ -366,8 +458,11 @@ export function findWildcards(
   excludeIds: Set<string>,
   limit = 3,
 ): Match[] {
-  return pool
-    .filter((candidate) => !excludeIds.has(candidate.id))
+  const unseen = pool.filter((candidate) => !excludeIds.has(candidate.id));
+  const compatible = unseen.filter((candidate) => childCompatible(seeker.childStatus, candidate.childStatus));
+  const wildcardPool = childGroup(seeker.childStatus) !== null && compatible.length > 0 ? compatible : unseen;
+
+  return wildcardPool
     .map((candidate) => {
       const { score, breakdown, reasons, headline } = scoreCandidate(seeker, candidate, {
         hobbyOnly: true,
