@@ -19,14 +19,27 @@ function linkedinHref(value: string) {
   return `https://www.linkedin.com/in/${trimmed.replace(/^\/+|^in\//g, "")}`;
 }
 
-export function MatchCard({ match, rank }: { match: PublicMatch; rank: number }) {
+export function MatchCard({
+  match,
+  rank,
+  tier = "primary",
+}: {
+  match: PublicMatch;
+  rank: number;
+  tier?: "primary" | "loose" | "wildcard";
+}) {
   const countries = match.countries.filter((code) => code !== HOME_COUNTRY);
 
   return (
     <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <header>
-        <p className="text-xs uppercase tracking-widest text-muted-foreground">
-          Introduction {rank}
+        <p className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
+          {tier === "primary" ? `Introduction ${rank}` : tier === "loose" ? `Tier 2 · looser match` : `Interesting profile`}
+          {tier !== "primary" && (
+            <Badge variant="secondary" className="normal-case tracking-normal">
+              {tier === "loose" ? "Wider net" : "Just for curiosity"}
+            </Badge>
+          )}
         </p>
         <h3 className="font-display text-2xl leading-tight text-foreground">
           {match.displayName}
