@@ -226,7 +226,10 @@ export function applyHardFilters(seeker: Seeker, pool: Candidate[], minimum = 3)
   if (survivors.length >= minimum) return { survivors, stepLabel, hobbyOnly: false };
 
   // Hobby-only mode: drop ICP, keep age ±5, rank on life context + interests.
-  const hobby = pool.filter((candidate) => withinAge(seeker, candidate, 5));
+  // If the seeker has a known parenting season, keep that as a non-negotiable
+  // compatibility constraint so non-parents don't outrank parent-to-parent fits.
+  const hobbyBase = childStatusIsKnown ? pool.filter((candidate) => childCompatible(seeker.childStatus, candidate.childStatus)) : pool;
+  const hobby = hobbyBase.filter((candidate) => withinAge(seeker, candidate, 5));
   if (hobby.length > survivors.length)
     return { survivors: hobby, stepLabel: "Hobby-only mode (life-stage dropped, age ±5)", hobbyOnly: true };
   return { survivors, stepLabel, hobbyOnly: false };
