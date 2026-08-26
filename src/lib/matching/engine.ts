@@ -163,6 +163,15 @@ function childStatusReason(seeker: Seeker, candidate: Candidate) {
   return null;
 }
 
+function ageSimilarityScore(seeker: Seeker, candidate: Candidate) {
+  if (seeker.age === null || candidate.age === null) return null;
+  const gap = Math.abs(seeker.age - candidate.age);
+  if (gap <= 2) return 1;
+  if (gap <= 5) return 0.8;
+  if (gap <= 8) return 0.35;
+  return 0;
+}
+
 function withinAge(seeker: Seeker, candidate: Candidate, tolerance: number) {
   if (seeker.age === null || candidate.age === null) return true;
   return Math.abs(seeker.age - candidate.age) <= tolerance;
@@ -268,6 +277,11 @@ export function scoreCandidate(
     parts.push({ dimension: "childStatus", score: child });
     const reason = childStatusReason(seeker, candidate);
     if (child > 0 && reason) reasons.push(reason);
+  }
+
+  const age = options.hobbyOnly ? null : ageSimilarityScore(seeker, candidate);
+  if (age !== null) {
+    parts.push({ dimension: "ageSimilarity", score: age });
   }
 
   if (!options.hobbyOnly && options.collectsBusinessType && seeker.businessType && candidate.businessType) {
