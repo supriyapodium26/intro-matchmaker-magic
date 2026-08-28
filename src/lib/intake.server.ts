@@ -261,7 +261,9 @@ export async function handleSubmitIntake(data: Payload) {
         "id, name, email, icp, birth_year, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests, stage_index, stage_label, business_type",
       )
       .eq("completed", true)
-      .neq("id", inserted.id),
+      .neq("id", inserted.id)
+      .order("created_at", { ascending: false }),
+
     supabaseAdmin.from("members").select(MEMBER_COLUMNS),
   ]);
 
