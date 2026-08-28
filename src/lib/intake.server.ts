@@ -319,7 +319,7 @@ export async function handleSubmitIntake(data: Payload) {
   );
   const matches = ranked.slice(0, 3);
   const looseMatches = ranked.slice(3, 6);
-  const excludeIds = new Set(ranked.map((match) => match.candidate.id));
+  const excludeIds = new Set(ranked.flatMap((match) => [match.candidate.id, identityKey(match.candidate)]));
   const wildcards = findWildcards(seeker, [...routeA, ...routeB], excludeIds, 3);
 
   await supabaseAdmin
