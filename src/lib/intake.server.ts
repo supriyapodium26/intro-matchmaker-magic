@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { IcpKey } from "@/lib/intake-tree";
 import { BUSINESS_TYPE_ICPS } from "@/lib/intake-tree";
-import { ageFromDob, findMatches, findWildcards, type Candidate, type Match, type Seeker } from "@/lib/matching/engine";
+import { ageFromDob, findMatches, findWildcards, identityKey, type Candidate, type Match, type Seeker } from "@/lib/matching/engine";
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -261,7 +261,9 @@ export async function handleSubmitIntake(data: Payload) {
         "id, name, email, icp, birth_year, role_label, role_level, company_type, company_size, company_size_band, child_status, expertise, countries, life_context, interests, stage_index, stage_label, business_type",
       )
       .eq("completed", true)
-      .neq("id", inserted.id),
+      .neq("id", inserted.id)
+      .order("created_at", { ascending: false }),
+
     supabaseAdmin.from("members").select(MEMBER_COLUMNS),
   ]);
 
@@ -270,12 +272,25 @@ export async function handleSubmitIntake(data: Payload) {
     throw new Error("We couldn't reach the membership database. Please try again.");
   }
 
+  // Repeat form submissions create one row per attempt, so keep only the most
+  // recent row per person before they ever reach the ranking.
+  const seenRespondents = new Set<string>();
   const routeA = (routeAResult.data ?? [])
     .filter((row) => String(row.email ?? "").toLowerCase() !== data.email.toLowerCase())
+    .filter((row) => String(row.name ?? "").trim().toLowerCase() !== data.name.trim().toLowerCase())
+    .filter((row) => {
+      const key =
+        String(row.email ?? "").trim().toLowerCase() ||
+        `n:${String(row.name ?? "").trim().toLowerCase()}`;
+      if (seenRespondents.has(key)) return false;
+      seenRespondents.add(key);
+      return true;
+    })
     .map((row) => toCandidate(row, "A"));
   const routeB = (routeBResult.data ?? [])
     .filter((row) => String(row.id) !== profile.memberId)
     .map((row) => toCandidate(row, "B"));
+
 
   const seeker: Seeker = {
     icp: data.icp as IcpKey,
@@ -304,7 +319,7 @@ export async function handleSubmitIntake(data: Payload) {
   );
   const matches = ranked.slice(0, 3);
   const looseMatches = ranked.slice(3, 6);
-  const excludeIds = new Set(ranked.map((match) => match.candidate.id));
+  const excludeIds = new Set(ranked.flatMap((match) => [match.candidate.id, identityKey(match.candidate)]));
   const wildcards = findWildcards(seeker, [...routeA, ...routeB], excludeIds, 3);
 
   await supabaseAdmin
