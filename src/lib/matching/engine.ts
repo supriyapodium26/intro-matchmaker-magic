@@ -414,9 +414,28 @@ function rank(
     .sort((a, b) => b.score - a.score);
 }
 
+/** Identity key so the same person can never appear twice (duplicate form
+ * submissions create separate rows with different ids). */
+export function identityKey(candidate: Candidate) {
+  const email = candidate.email?.trim().toLowerCase();
+  if (email) return `e:${email}`;
+  return `n:${candidate.name.trim().toLowerCase().replace(/\s+/g, " ")}`;
+}
+
+function pushUnique(target: Match[], source: Match[], seen: Set<string>, limit: number) {
+  for (const match of source) {
+    if (target.length >= limit) return;
+    const key = identityKey(match.candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    target.push(match);
+  }
+}
+
 /**
- * Route A (form respondents, full profiles incl. stage) is tried first; Route B
- * (imported membership pool, no stage data) tops the list up to three.
+ * Same-ICP matches always come first (Route A respondents ahead of Route B
+ * members). Loose "hobby-only" results are a last resort — they must never
+ * outrank a genuine life-stage match from the membership pool.
  */
 export function findMatches(
   seeker: Seeker,
@@ -426,25 +445,22 @@ export function findMatches(
   limit = 3,
 ): Match[] {
   const primary = rank(seeker, routeA, collectsBusinessType);
-  const strong = primary.filter((match) => match.score >= 40);
-  if (strong.length >= limit) return strong.slice(0, limit);
   const fallback = rank(seeker, routeB, collectsBusinessType);
-  const seen = new Set(strong.map((match) => match.candidate.id));
-  const combined = [...strong];
-  for (const match of fallback) {
-    if (combined.length >= limit) break;
-    if (seen.has(match.candidate.id)) continue;
-    combined.push(match);
-  }
-  if (combined.length < limit) {
-    for (const match of primary) {
-      if (combined.length >= limit) break;
-      if (combined.some((item) => item.candidate.id === match.candidate.id)) continue;
-      combined.push(match);
-    }
-  }
+
+  const primaryStrict = primary.filter((match) => !match.hobbyOnly && match.score >= 40);
+  const fallbackStrict = fallback.filter((match) => !match.hobbyOnly);
+  const loose = [...primary, ...fallback]
+    .filter((match) => match.hobbyOnly || match.score < 40)
+    .sort((a, b) => b.score - a.score);
+
+  const seen = new Set<string>();
+  const combined: Match[] = [];
+  pushUnique(combined, primaryStrict, seen, limit);
+  pushUnique(combined, fallbackStrict, seen, limit);
+  pushUnique(combined, loose, seen, limit);
   return combined.slice(0, limit);
 }
+
 
 /**
  * "Interesting profiles" — a deliberately loose, curiosity-driven list used when
