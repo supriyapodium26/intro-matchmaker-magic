@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { IcpKey } from "@/lib/intake-tree";
 import { BUSINESS_TYPE_ICPS } from "@/lib/intake-tree";
-import { ageFromDob, findMatches, findWildcards, type Candidate, type Match, type Seeker } from "@/lib/matching/engine";
+import { ageFromDob, findMatches, findWildcards, identityKey, type Candidate, type Match, type Seeker } from "@/lib/matching/engine";
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
