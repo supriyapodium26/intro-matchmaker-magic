@@ -270,12 +270,25 @@ export async function handleSubmitIntake(data: Payload) {
     throw new Error("We couldn't reach the membership database. Please try again.");
   }
 
+  // Repeat form submissions create one row per attempt, so keep only the most
+  // recent row per person before they ever reach the ranking.
+  const seenRespondents = new Set<string>();
   const routeA = (routeAResult.data ?? [])
     .filter((row) => String(row.email ?? "").toLowerCase() !== data.email.toLowerCase())
+    .filter((row) => String(row.name ?? "").trim().toLowerCase() !== data.name.trim().toLowerCase())
+    .filter((row) => {
+      const key =
+        String(row.email ?? "").trim().toLowerCase() ||
+        `n:${String(row.name ?? "").trim().toLowerCase()}`;
+      if (seenRespondents.has(key)) return false;
+      seenRespondents.add(key);
+      return true;
+    })
     .map((row) => toCandidate(row, "A"));
   const routeB = (routeBResult.data ?? [])
     .filter((row) => String(row.id) !== profile.memberId)
     .map((row) => toCandidate(row, "B"));
+
 
   const seeker: Seeker = {
     icp: data.icp as IcpKey,
