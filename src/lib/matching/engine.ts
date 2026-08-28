@@ -474,9 +474,18 @@ export function findWildcards(
   excludeIds: Set<string>,
   limit = 3,
 ): Match[] {
-  const unseen = pool.filter((candidate) => !excludeIds.has(candidate.id));
-  const compatible = unseen.filter((candidate) => childCompatible(seeker.childStatus, candidate.childStatus));
-  const wildcardPool = childGroup(seeker.childStatus) !== null && compatible.length > 0 ? compatible : unseen;
+  const unseen = pool.filter((candidate) => !excludeIds.has(candidate.id) && !excludeIds.has(identityKey(candidate)));
+  const deduped: Candidate[] = [];
+  const seenKeys = new Set<string>();
+  for (const candidate of unseen) {
+    const key = identityKey(candidate);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    deduped.push(candidate);
+  }
+  const compatible = deduped.filter((candidate) => childCompatible(seeker.childStatus, candidate.childStatus));
+  const wildcardPool = childGroup(seeker.childStatus) !== null && compatible.length > 0 ? compatible : deduped;
+
 
   return wildcardPool
     .map((candidate) => {
