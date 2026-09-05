@@ -4,3 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # These are Supabase's publishable/anon key, project ID, and URL — safe to expose
+  # client-side by design (Supabase security relies on Row Level Security, not key secrecy).
+  # Netlify's secrets scanner otherwise flags them as false-positive leaked secrets.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_PROJECT_ID,SUPABASE_PUBLISHABLE_KEY,SUPABASE_URL,VITE_SUPABASE_PROJECT_ID,VITE_SUPABASE_PUBLISHABLE_KEY,VITE_SUPABASE_URL"
