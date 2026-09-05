@@ -50,6 +50,11 @@ export type MatchBreakdown = {
   weight: number;
 };
 
+/** One "Why You Two" bullet — the value is kept separate so the client can
+ * bold it and pick an icon without generating any text itself. */
+export type ReasonType = "lifeContext" | "interests" | "countries";
+export type MatchReason = { type: ReasonType; prefix: string; value: string; suffix: string };
+
 export type Match = {
   candidate: Candidate;
   score: number;
@@ -58,7 +63,7 @@ export type Match = {
   filterStep: string;
   breakdown: MatchBreakdown[];
   headline: string;
-  reasons: string[];
+  reasons: MatchReason[];
   hobbyOnly: boolean;
 };
 
@@ -67,33 +72,6 @@ export type Match = {
 const VAGUE_EXPERTISE = ["entrepreneur", "entrepreneurship", "founder", "business owner"];
 
 type ChildGroup = "parent" | "childfree" | "exploring";
-
-const CHILD_STATUS_COPY: Record<string, { headline: string; reason: string }> = {
-  childfree: {
-    headline: "is also intentionally child-free",
-    reason: "You're both in a similar child-free life season",
-  },
-  exploring: {
-    headline: "is also thinking about parenthood",
-    reason: "You're both thinking about parenthood in this season",
-  },
-  parent_young: {
-    headline: "is also a mom of young kids",
-    reason: "You're both mothers of young children, so the day-to-day context will feel familiar",
-  },
-  parent_school: {
-    headline: "is also a mom of school-age kids",
-    reason: "You're both parenting school-age children alongside everything else you're building",
-  },
-  parent_teen: {
-    headline: "is also parenting older children",
-    reason: "You're both parenting older children in this season",
-  },
-  parent_multi: {
-    headline: "is also navigating motherhood across stages",
-    reason: "You're both balancing motherhood with a full professional life",
-  },
-};
 
 function meaningfulExpertise(value: string | null) {
   if (!value) return null;
@@ -152,15 +130,6 @@ function childStatusScore(seeker: Seeker, candidate: Candidate) {
   if (seekerGroup !== candidateGroup) return 0;
   if (seeker.childStatus === candidate.childStatus) return 1;
   return seekerGroup === "parent" ? 0.8 : 0.9;
-}
-
-function childStatusReason(seeker: Seeker, candidate: Candidate) {
-  if (!seeker.childStatus || !candidate.childStatus) return null;
-  if (seeker.childStatus === candidate.childStatus) return CHILD_STATUS_COPY[candidate.childStatus]?.reason ?? null;
-  if (childGroup(seeker.childStatus) === "parent" && childGroup(candidate.childStatus) === "parent") {
-    return "You're both mothers, so there's a real shared layer to the season you're in";
-  }
-  return null;
 }
 
 function ageSimilarityScore(seeker: Seeker, candidate: Candidate) {
@@ -260,23 +229,15 @@ export function scoreCandidate(
   options: { hobbyOnly: boolean; collectsBusinessType: boolean },
 ) {
   const parts: { dimension: Dimension; score: number }[] = [];
-  const reasons: string[] = [];
 
   const stage = options.hobbyOnly ? null : stageScore(seeker, candidate);
   if (stage !== null) {
     parts.push({ dimension: "stage", score: stage });
-    if (stage >= 0.9) {
-      reasons.push(`You're in almost exactly the same chapter right now`);
-    } else if (stage >= 0.5) {
-      reasons.push(`You're a step apart on the same path, so there's plenty to compare notes on`);
-    }
   }
 
   const child = options.hobbyOnly ? null : childStatusScore(seeker, candidate);
   if (child !== null) {
     parts.push({ dimension: "childStatus", score: child });
-    const reason = childStatusReason(seeker, candidate);
-    if (child > 0 && reason) reasons.push(reason);
   }
 
   const age = options.hobbyOnly ? null : ageSimilarityScore(seeker, candidate);
@@ -287,42 +248,27 @@ export function scoreCandidate(
   if (!options.hobbyOnly && options.collectsBusinessType && seeker.businessType && candidate.businessType) {
     const same = seeker.businessType === candidate.businessType ? 1 : 0;
     parts.push({ dimension: "businessType", score: same });
-    if (same)
-      reasons.push(
-        `You're building the same kind of thing — ${(candidate.businessType.split("—")[0] ?? candidate.businessType).trim().toLowerCase()}`,
-      );
   }
 
+  const expertiseMatches =
+    !options.hobbyOnly && Boolean(seeker.expertise) && seeker.expertise === candidate.expertise;
   if (!options.hobbyOnly && seeker.expertise && candidate.expertise) {
-    const same = seeker.expertise === candidate.expertise ? 1 : 0;
-    parts.push({ dimension: "expertise", score: same });
-    const shownExpertise = meaningfulExpertise(candidate.expertise);
-    if (same && shownExpertise) reasons.push(`You both work in ${shownExpertise}`);
+    parts.push({ dimension: "expertise", score: expertiseMatches ? 1 : 0 });
   }
 
   const life = jaccard(seeker.lifeContext, candidate.lifeContext);
   if (life !== null) {
     parts.push({ dimension: "lifeContext", score: life.score });
-    if (life.shared.length > 0) {
-      const labels = life.shared.map((tag) => LIFE_CONTEXT_TAG_LABELS[tag] ?? tag);
-      reasons.push(`You're both ${labels.slice(0, 2).join(" and ")} — she'll get it without you explaining`);
-    }
   }
 
   const interests = jaccard(seeker.interests, candidate.interests);
   if (interests !== null) {
     parts.push({ dimension: "interests", score: interests.score });
-    if (interests.shared.length > 0) {
-      reasons.push(`She's into ${listOf(interests.shared.slice(0, 3))} too`);
-    }
   }
 
   const countries = countryScore(seeker.countries, candidate.countries);
   if (countries !== null) {
     parts.push({ dimension: "countries", score: countries.score });
-    if (countries.shared.length > 0) {
-      reasons.push(`You've both lived in ${listOf(countries.shared.slice(0, 2).map(countryName))}`);
-    }
   }
 
   // Route B members carry no stage/business-type answers, so they are scored on
@@ -341,7 +287,46 @@ export function scoreCandidate(
     weight: totalWeight === 0 ? 0 : Math.round((table[part.dimension] / totalWeight) * 100),
   }));
 
-  return { score, breakdown, reasons, headline: headlineFor(seeker, candidate) };
+  // Reasons are deterministic templates over real overlap data only — never
+  // invented prose. Priority: shared life-context tags first (highest
+  // emotional resonance for an introductions feature), then shared
+  // interests, then shared countries. Expertise is shown as its own chip
+  // already, so it isn't repeated here. Capped at 2 bullets.
+  const sharedLifeContext = life?.shared ?? [];
+  // The headline (clause 3) always claims the first shared tag, so the
+  // bullet picks the next-best remaining one instead of repeating it.
+  const headlineLifeContextTag = sharedLifeContext[0] ?? null;
+  const bulletLifeContextTag =
+    sharedLifeContext.find((tag) => tag !== headlineLifeContextTag) ?? null;
+  const reasonCandidates: MatchReason[] = [];
+  if (bulletLifeContextTag) {
+    const label = LIFE_CONTEXT_TAG_LABELS[bulletLifeContextTag] ?? bulletLifeContextTag;
+    reasonCandidates.push({
+      type: "lifeContext",
+      prefix: "You're both ",
+      value: label,
+      suffix: " — she'll get it without you explaining",
+    });
+  }
+  if (interests !== null && interests.shared.length > 0) {
+    reasonCandidates.push({
+      type: "interests",
+      prefix: "She's into ",
+      value: interests.shared[0]!,
+      suffix: " too",
+    });
+  }
+  if (countries !== null && countries.shared.length > 0) {
+    reasonCandidates.push({
+      type: "countries",
+      prefix: "You've both lived in ",
+      value: countryName(countries.shared[0]!),
+      suffix: "",
+    });
+  }
+  const reasons = reasonCandidates.slice(0, 2);
+
+  return { score, breakdown, reasons, headline: headlineFor(seeker, candidate, sharedLifeContext) };
 }
 
 function listOf(items: string[]) {
@@ -350,9 +335,10 @@ function listOf(items: string[]) {
   return `${items.slice(0, -1).join(", ")} and ${final}`;
 }
 
-/** One warm sentence introducing the match, e.g. "Jovita is a manager in
- * Consulting, close to your age, and she's at a career crossroads too." */
-function headlineFor(seeker: Seeker, candidate: Candidate) {
+/** One warm sentence introducing the match, e.g. "Jovita leads at director
+ * level in Consulting, is close to your age, is also a working mom, and is
+ * also at a career crossroads too." */
+function headlineFor(seeker: Seeker, candidate: Candidate, sharedLifeContext: string[]) {
   const first = candidate.name.trim().split(/\s+/)[0] ?? "She";
   const bits: string[] = [];
   const role = roleDescriptor(candidate.roleLabel, meaningfulExpertise(candidate.expertise));
@@ -362,9 +348,9 @@ function headlineFor(seeker: Seeker, candidate: Candidate) {
     if (gap <= 2) bits.push("is right around your age");
     else if (gap <= 5) bits.push("is close to your age");
   }
-  if (seeker.childStatus && seeker.childStatus === candidate.childStatus) {
-    const childCopy = CHILD_STATUS_COPY[candidate.childStatus]?.headline;
-    if (childCopy) bits.push(childCopy);
+  if (sharedLifeContext.length > 0) {
+    const topTag = sharedLifeContext[0]!;
+    bits.push(`is also ${LIFE_CONTEXT_TAG_LABELS[topTag] ?? topTag}`);
   }
   bits.push(`is ${ICP_WARM_PHRASE[candidate.icp]}`);
   return `${first} ${listOf(bits)}.`;

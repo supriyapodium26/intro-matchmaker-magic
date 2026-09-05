@@ -741,7 +741,7 @@ function ResultsPanel({
             style={{ animationDelay: `${index * 80}ms` }}
             className="duration-500 fill-mode-backwards animate-in fade-in slide-in-from-bottom-2"
           >
-            <MatchCard match={match} rank={index + 1} />
+            <RevealingMatchCard match={match} rank={index + 1} expandedByDefault={index === 0} />
           </div>
         ))
       ) : (
@@ -773,6 +773,45 @@ function ResultsPanel({
         </div>
       ) : null}
 
+    </div>
+  );
+}
+
+/** Match 1 renders fully expanded immediately. Matches 2 and 3 render
+ * collapsed (name + role only, faded) until scrolled into view, then expand
+ * for good — they never re-collapse once revealed. */
+function RevealingMatchCard({
+  match,
+  rank,
+  expandedByDefault,
+}: {
+  match: PublicMatch;
+  rank: number;
+  expandedByDefault: boolean;
+}) {
+  const [expanded, setExpanded] = useState(expandedByDefault);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (expanded) return;
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setExpanded(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  return (
+    <div ref={ref}>
+      <MatchCard match={match} rank={rank} expanded={expanded} />
     </div>
   );
 }

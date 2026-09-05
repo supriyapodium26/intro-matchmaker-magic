@@ -233,6 +233,7 @@ export const OPEN_TEXT_PROMPT =
   "What would you want someone to just understand in this journey, without having to explain it?";
 
 export const LIFE_CONTEXT_OPTIONS: { label: string; tags: string[] }[] = [
+  { label: "I'm single and/or don't have kids, with none planned", tags: ["single_no_kids"] },
   { label: "I'm recently married", tags: ["recently_married"] },
   { label: "I'm planning for parenthood", tags: ["planning_parenthood"] },
   { label: "I'm returning to work after maternity leave", tags: ["returning_maternity", "mom"] },
@@ -250,23 +251,33 @@ export const LIFE_CONTEXT_OPTIONS: { label: string; tags: string[] }[] = [
 
 export const LIFE_CONTEXT_PROMPT = "Anything else that's shaping where you are right now?";
 
+/** Lowercase, article-prefixed phrasing for use inside generated sentences
+ * ("is also a working mom", "You're both a pet parent"). For the verbatim
+ * value shown on chips, use LIFE_CONTEXT_CHIP_LABELS instead. */
 export const LIFE_CONTEXT_TAG_LABELS: Record<string, string> = {
-  recently_married: "recently married",
-  planning_parenthood: "planning for parenthood",
-  returning_maternity: "back from maternity leave",
-  mom: "a mom",
-  new_mom: "a new mom",
-  older_kids: "a mom with older children",
-  expat_sg: "an expat in Singapore",
-  third_culture: "a third culture kid",
   moved_sg: "recently settled in Singapore",
-  sg_returning: "a Singaporean back from abroad",
-  career_break: "on a career break",
-  burnout: "recovering from burnout",
-  pet_parent: "a pet parent",
-  digital_nomad: "remote / nomadic",
+  sg_returning: "a Singaporean returning from abroad",
+  third_culture: "a third culture kid",
+  digital_nomad: "a digital nomad",
+  working_mom: "a working mom",
+  new_mom: "a new mom",
   entrepreneur_mom: "an entrepreneur mom",
   single_mom: "a single mom",
+  pet_parent: "a pet parent",
+};
+
+/** Verbatim, capitalized display value for "Other parts of her" chips —
+ * never run through the sentence-grammar transform above. */
+export const LIFE_CONTEXT_CHIP_LABELS: Record<string, string> = {
+  moved_sg: "Recently settled in Singapore",
+  sg_returning: "Singaporean returning from abroad",
+  third_culture: "Third culture kid",
+  digital_nomad: "Digital nomad / remote working",
+  working_mom: "Working mom",
+  new_mom: "New mom",
+  entrepreneur_mom: "Entrepreneur mom",
+  single_mom: "Single mom",
+  pet_parent: "Pet parent",
 };
 
 // ---- Profile facts the algorithm's hard filters need (not in the drawn tree) ----
@@ -299,24 +310,24 @@ export const COMPANY_SIZE_OPTIONS: { label: string; band: number }[] = [
 ];
 
 export const EXPERTISE_OPTIONS = [
-  "Marketing & Brand",
-  "Sales & Business Development",
-  "Product Design & Management",
-  "Engineering & Technical",
-  "Data & Analytics",
-  "Finance & Accounting",
-  "People/HR",
-  "Operations & Strategy",
-  "Legal & Compliance",
-  "General Management",
   "Consulting",
-  "Entrepreneur",
   "Content Creation/Writing",
   "Creative/Arts",
+  "Data & Analytics",
   "Education/Learning",
+  "Engineering & Technical",
+  "Entrepreneur",
+  "Finance & Accounting",
+  "General Management",
   "Healthcare/Medical",
+  "Legal & Compliance",
+  "People/HR",
+  "Marketing & Brand",
+  "Product Design & Management",
+  "Operations & Strategy",
+  "Real Estate",
   "Research",
-  "Other",
+  "Sales & Business Development",
 ];
 
 export const CHILD_STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -376,6 +387,17 @@ export const COUNTRY_OPTIONS: { label: string; code: string }[] = [
 export const SHARED_PROFILE_HEADING = "A little more about you";
 export const JOURNEY_HEADING = "Where you are right now";
 export const CONTACT_HEADING = "First, the basics";
+
+/** Short ICP-level answer shown on match cards under "What she's navigating" —
+ * the season, not the finer stage sub-answer. */
+export const ICP_CARD_LABELS: Record<IcpKey, string> = {
+  career_crossroads: "In a corporate career, rethinking my direction",
+  side_hustler: "Building a business alongside my full time job",
+  early_stage_founder: "Recently went all-in on my own business",
+  late_stage_founder: "Been running a business full time for 3+ years",
+  portfolio_independent: "Got multiple income streams through consulting, freelance/fractional roles",
+  established_career: "Committed to growing in a corporate career",
+};
 
 /** Warm, human phrasing of each life stage, used in match write-ups. */
 export const ICP_WARM_PHRASE: Record<IcpKey, string> = {
