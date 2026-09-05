@@ -1,17 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import {
-  contactInputValidator,
-  handleLookupMember,
+  handleGetDemoPersona,
   handleSubmitIntake,
   payloadInputValidator,
 } from "@/lib/intake.server";
 
 export type { PublicMatch } from "@/lib/intake.server";
 
-export const lookupMember = createServerFn({ method: "POST" })
-  .inputValidator(contactInputValidator)
-  .handler(async ({ data }) => handleLookupMember(data));
+export const getDemoPersona = createServerFn({ method: "GET" }).handler(async () =>
+  handleGetDemoPersona(),
+);
 
 export const submitIntake = createServerFn({ method: "POST" })
   .inputValidator(payloadInputValidator)

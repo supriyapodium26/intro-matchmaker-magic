@@ -11,7 +11,6 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { MatchCard } from "@/components/intake/MatchCard";
-import { Button } from "@/components/ui/button";
 import {
   BUSINESS_TYPE,
   BUSINESS_TYPE_ICPS,
@@ -26,7 +25,7 @@ import {
   STAGES,
   type IcpKey,
 } from "@/lib/intake-tree";
-import { lookupMember, submitIntake, type PublicMatch } from "@/lib/intake.functions";
+import { getDemoPersona, submitIntake, type PublicMatch } from "@/lib/intake.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,9 +50,6 @@ export const Route = createFileRoute("/")({
 });
 
 type StepId =
-  | "name"
-  | "email"
-  | "phone"
   | "icp"
   | "gate"
   | "reroute"
@@ -65,9 +61,6 @@ type StepId =
   | "results";
 
 const ORDER: StepId[] = [
-  "name",
-  "email",
-  "phone",
   "icp",
   "gate",
   "reroute",
@@ -80,9 +73,6 @@ const ORDER: StepId[] = [
 ];
 
 type Answers = {
-  name: string;
-  email: string;
-  phone: string;
   initialIcp: IcpKey | null;
   icp: IcpKey | null;
   gateAnswer: "yes" | "no" | null;
@@ -96,9 +86,6 @@ type Answers = {
 };
 
 const EMPTY: Answers = {
-  name: "",
-  email: "",
-  phone: "",
   initialIcp: null,
   icp: null,
   gateAnswer: null,
@@ -113,17 +100,6 @@ const EMPTY: Answers = {
 
 type Bubble = { role: "bot" | "user"; text: string; id: string };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-function visitorId() {
-  if (typeof window === "undefined") return "server";
-  const existing = window.localStorage.getItem("podium-visitor");
-  if (existing) return existing;
-  const fresh = `v_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-  window.localStorage.setItem("podium-visitor", fresh);
-  return fresh;
-}
-
 function Index() {
   const [sessionKey, setSessionKey] = useState(0);
 
@@ -137,7 +113,7 @@ function Index() {
             className="size-8 rounded-full object-cover"
           />
           <span className="font-display text-lg leading-none text-background">
-            Podium Introductions
+            Your Podium Curator
           </span>
         </div>
         <button
@@ -155,7 +131,7 @@ function Index() {
 
 function IntakeChat() {
   const [answers, setAnswers] = useState<Answers>(EMPTY);
-  const [step, setStep] = useState<StepId>("name");
+  const [step, setStep] = useState<StepId>("icp");
   const [pendingTarget, setPendingTarget] = useState<"founder_length" | null>(null);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [multi, setMulti] = useState<string[]>([]);
@@ -164,6 +140,7 @@ function IntakeChat() {
   const [dockVisible, setDockVisible] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoFirstName, setDemoFirstName] = useState("there");
   const [result, setResult] = useState<{
     matches: PublicMatch[];
     looseMatches: PublicMatch[];
@@ -175,7 +152,7 @@ function IntakeChat() {
   const dockRef = useRef<HTMLDivElement>(null);
   const [dockKey, setDockKey] = useState(0);
   const run = useServerFn(submitIntake);
-  const lookup = useServerFn(lookupMember);
+  const fetchDemoPersona = useServerFn(getDemoPersona);
 
   const prompt = useMemo(() => promptFor(step, answers), [step, answers]);
 
@@ -212,17 +189,31 @@ function IntakeChat() {
     [say],
   );
 
-  const start = () => {
+  const start = async () => {
     setHasStarted(true);
+    setTyping(true);
+    let firstName = "there";
+    try {
+      const persona = await fetchDemoPersona();
+      if (persona.firstName) firstName = persona.firstName;
+    } catch {
+      // keep the fallback greeting if the persona lookup fails
+    }
+    setDemoFirstName(firstName);
+    setTyping(false);
     botSay(
-      "Hi — I'm the Podium introductions assistant. A few quick questions, and I'll show you the three members we'd introduce you to.",
-      () => botSay("First — what's your name?", () => setDockVisible(true), 600),
+      `Hi ${firstName}! I'm Lam, Podium's curator. You shouldn't have to scroll through hundreds of profiles hoping to recognise yourself in one. We've spent a year learning what makes an introduction land, and it's seldom the work itself. It's the relief of meeting someone weighing the same things you are. Answer a few questions, and I'll show you three people I think you'll enjoy meeting.`,
+      () => {
+        const icpPrompt = promptFor("icp", EMPTY);
+        if (icpPrompt) botSay(icpPrompt.question, () => setDockVisible(true));
+        else setDockVisible(true);
+      },
       350,
     );
   };
 
   const progressTotal =
-    3 + (answers.icp ? 1 : 1) + 3 + (answers.icp && BUSINESS_TYPE_ICPS.includes(answers.icp) ? 1 : 0);
+    (answers.icp ? 1 : 1) + 3 + (answers.icp && BUSINESS_TYPE_ICPS.includes(answers.icp) ? 1 : 0);
   const answered = bubbles.filter((bubble) => bubble.role === "user").length;
 
   function nextStep(from: StepId, next: Answers, target: "founder_length" | null) {
@@ -276,13 +267,8 @@ function IntakeChat() {
     setLoading(true);
     setError(null);
     try {
-      const transcript = bubbles.map(({ role, text }) => ({ role, text }));
       const response = await run({
         data: {
-          visitorId: visitorId(),
-          name: final.name,
-          email: final.email,
-          phone: final.phone,
           icp: final.icp ?? "established_career",
           gateAnswer: final.gateAnswer,
           rerouteAnswer: final.rerouteAnswer,
@@ -292,14 +278,13 @@ function IntakeChat() {
           businessType: final.businessType,
           openText: final.openText,
           lifeContext: final.lifeContext,
-          transcript: transcript.slice(-100),
         },
       });
       say(
         "bot",
         response.matches.length > 0
-          ? `Here are the ${response.matches.length} members I'd introduce you to, ${final.name.split(" ")[0]}.`
-          : "I couldn't find a compatible match in the current pool yet — your answers are saved, and we'll match you as the pool grows.",
+          ? `Hey ${demoFirstName}, these are three members I think you should connect with. Each of them shares something with you - where you are right now, or what you're drawn to outside of work. Read through their profiles and reach out to whoever you find yourself in.`
+          : "I couldn't find a compatible match in the current pool right now.",
       );
       setResult(response);
     } catch (caught) {
@@ -310,42 +295,8 @@ function IntakeChat() {
   }
 
   function handleText(value: string) {
-    if (step === "name") return advance({ name: value }, value);
-    if (step === "email") return advance({ email: value }, value);
-    if (step === "phone") {
-      void handlePhone(value);
-      return undefined;
-    }
     if (step === "openText") return advance({ openText: value || null }, value || "(skipped)");
     return undefined;
-  }
-
-  async function handlePhone(value: string) {
-    const next = { ...answers, phone: value };
-    setAnswers(next);
-    setDockVisible(false);
-    say("user", value);
-    setError(null);
-    setTyping(true);
-    let found = false;
-    try {
-      const lookedUp = await lookup({
-        data: { name: next.name, email: next.email, phone: value },
-      });
-      found = lookedUp.found;
-    } catch {
-      found = false;
-    }
-    setTyping(false);
-    setStep("icp");
-    const nextPrompt = promptFor("icp", next);
-    const askIcp = () =>
-      nextPrompt ? botSay(nextPrompt.question, () => setDockVisible(true), 600) : setDockVisible(true);
-    if (found) {
-      botSay(`Lovely — good to have you back, ${next.name.split(" ")[0]}.`, askIcp, 450);
-    } else {
-      askIcp();
-    }
   }
 
   function chooseOption(option: { label: string; value: string }) {
@@ -400,7 +351,7 @@ function IntakeChat() {
   }
 
   const isMulti = step === "lifeContext";
-  const isText = ["name", "email", "phone", "openText"].includes(step);
+  const isText = step === "openText";
   const showDock = dockVisible && !typing && !loading && !result && Boolean(prompt);
 
   return (
@@ -522,11 +473,7 @@ function IntakeChat() {
   );
 }
 
-function validateText(step: StepId, value: string): string | null {
-  if (step === "name") return value.trim().length > 1 ? null : "Please add your name";
-  if (step === "email") return EMAIL_RE.test(value.trim()) ? null : "That email doesn't look right";
-  if (step === "phone")
-    return value.trim().replace(/\D/g, "").length >= 6 ? null : "Please add a valid phone number";
+function validateText(_step: StepId, _value: string): string | null {
   return null;
 }
 
@@ -557,35 +504,19 @@ function TextAnswer({
       }}
       className="flex flex-col gap-2"
     >
-      <DockHint>{step === "openText" ? "Say as much or as little as you like" : "Type your answer"}</DockHint>
+      <DockHint>Say as much or as little as you like</DockHint>
       <div className="flex items-center gap-2">
-        {step === "openText" ? (
-          <textarea
-            value={value}
-            onChange={(event) => {
-              setValue(event.target.value);
-              onError(null);
-            }}
-            rows={3}
-            placeholder={placeholder}
-            autoFocus
-            className="w-full flex-1 resize-none rounded-2xl border border-border bg-card px-4 py-3 text-base text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-          />
-        ) : (
-          <input
-            value={value}
-            onChange={(event) => {
-              setValue(event.target.value);
-              onError(null);
-            }}
-            type={step === "email" ? "email" : step === "phone" ? "tel" : "text"}
-            inputMode={step === "phone" ? "tel" : step === "email" ? "email" : "text"}
-            autoComplete={step === "name" ? "name" : step === "email" ? "email" : step === "phone" ? "tel" : "off"}
-            placeholder={placeholder}
-            autoFocus
-            className="min-h-12 w-full flex-1 rounded-2xl border border-border bg-card px-4 py-3 text-base text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-          />
-        )}
+        <textarea
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            onError(null);
+          }}
+          rows={3}
+          placeholder={placeholder}
+          autoFocus
+          className="w-full flex-1 resize-none rounded-2xl border border-border bg-card px-4 py-3 text-base text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+        />
         <button
           type="submit"
           aria-label="Send"
@@ -842,26 +773,6 @@ function ResultsPanel({
         </div>
       ) : null}
 
-      {revealed && (result.looseMatches.length > 0 || result.wildcards.length > 0) ? (
-        <div className="flex flex-wrap justify-center gap-2">
-          {result.looseMatches.length > 0 && !showLoose ? (
-            <Button variant="outline" onClick={() => setShowLoose(true)}>
-              Expand list (tier 2 · looser matches)
-            </Button>
-          ) : null}
-          {result.wildcards.length > 0 && !showWildcards ? (
-            <Button variant="ghost" onClick={() => setShowWildcards(true)}>
-              Not quite right? Suggest interesting profiles
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {result.matches.length > 0 ? (
-        <p className="text-center text-xs text-muted-foreground">
-          Chosen from {result.poolSizes.routeB} members in the Podium membership directory.
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -875,20 +786,6 @@ type Prompt = {
 function promptFor(step: StepId, answers: Answers): Prompt | null {
   const asOptions = (labels: string[]) => labels.map((label) => ({ label, value: label }));
   switch (step) {
-    case "name":
-      return { question: "First — what's your name?", placeholder: "Your full name", options: [] };
-    case "email":
-      return {
-        question: "What email should we use for your introductions?",
-        placeholder: "you@example.com",
-        options: [],
-      };
-    case "phone":
-      return {
-        question: "And a phone number we can reach you on?",
-        placeholder: "+65 9123 4567",
-        options: [],
-      };
     case "icp":
       return {
         question: "Which of these sounds most like you right now?",

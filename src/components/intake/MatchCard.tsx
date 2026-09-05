@@ -1,9 +1,8 @@
-import { ArrowUpRight, Linkedin, Send } from "lucide-react";
+import { Linkedin, Send } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { countryName } from "@/lib/countries";
-import { HOME_COUNTRY, ICP_LABELS, LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
+import { LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
 import type { PublicMatch } from "@/lib/intake.functions";
 
 const VAGUE_EXPERTISE = ["entrepreneur", "entrepreneurship", "founder", "business owner"];
@@ -48,8 +47,8 @@ export function MatchCard({
   rank: number;
   tier?: "primary" | "loose" | "wildcard";
 }) {
-  const countries = match.countries.filter((code) => code !== HOME_COUNTRY);
   const expertise = expertiseLabel(match.expertise);
+  const firstName = match.displayName.split(" ")[0] ?? match.displayName;
 
   return (
     <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -62,49 +61,33 @@ export function MatchCard({
             </Badge>
           )}
         </p>
-        <div className="mt-1 flex items-start justify-between gap-3">
-          <h3 className="font-display text-2xl leading-tight text-foreground">
-            {match.displayName}
-          </h3>
-          {match.linkedin && (
-            <a
-              href={linkedinHref(match.linkedin)}
-              target="_blank"
-              rel="noreferrer noopener"
-              aria-label={`${match.displayName} on LinkedIn`}
-              className="text-muted-foreground transition-colors hover:text-primary"
-            >
-              <ArrowUpRight aria-hidden className="size-5" />
-            </a>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {[match.roleLabel, match.companyType, ICP_LABELS[match.icp] ?? match.icp]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
+        <h3 className="mt-1 font-display text-2xl leading-tight text-foreground">
+          {match.displayName}
+        </h3>
       </header>
-
-      <p className="mt-3 text-sm text-foreground">{match.headline}</p>
-
-      {match.reasons.length > 0 && (
-        <ul className="mt-3 space-y-1.5 text-sm text-foreground">
-          {match.reasons.slice(0, 4).map((reason) => (
-            <li key={reason} className="flex gap-2">
-              <span aria-hidden className="text-primary">
-                •
-              </span>
-              <span>{reason}</span>
-            </li>
-          ))}
-        </ul>
-      )}
 
       <div className="mt-4 space-y-3 border-t border-border pt-4">
         {match.stageLabel && (
-          <FieldRow label="What she's navigating">
+          <FieldRow label="What I'm navigating">
             <div className="flex flex-wrap gap-1.5">
               <Chip>{match.stageLabel}</Chip>
+            </div>
+          </FieldRow>
+        )}
+        {match.lifeContext.length > 0 && (
+          <FieldRow label="Other parts of me">
+            <div className="flex flex-wrap gap-1.5">
+              {match.lifeContext.slice(0, 4).map((tag) => (
+                <Chip key={tag}>{LIFE_CONTEXT_TAG_LABELS[tag] ?? tag}</Chip>
+              ))}
+            </div>
+          </FieldRow>
+        )}
+        {(match.roleLabel || match.companyType) && (
+          <FieldRow label="Space I operate in">
+            <div className="flex flex-wrap gap-1.5">
+              {match.roleLabel && <Chip>{match.roleLabel}</Chip>}
+              {match.companyType && <Chip>{match.companyType}</Chip>}
             </div>
           </FieldRow>
         )}
@@ -115,20 +98,8 @@ export function MatchCard({
             </div>
           </FieldRow>
         )}
-        {(match.lifeContext.length > 0 || countries.length > 0) && (
-          <FieldRow label="Other parts of her">
-            <div className="flex flex-wrap gap-1.5">
-              {match.lifeContext.slice(0, 4).map((tag) => (
-                <Chip key={tag}>{LIFE_CONTEXT_TAG_LABELS[tag] ?? tag}</Chip>
-              ))}
-              {countries.slice(0, 3).map((code) => (
-                <Chip key={code}>Lived in {countryName(code)}</Chip>
-              ))}
-            </div>
-          </FieldRow>
-        )}
         {match.interests.length > 0 && (
-          <FieldRow label="What she's into">
+          <FieldRow label="What I'm into">
             <div className="flex flex-wrap gap-1.5">
               {match.interests.slice(0, 5).map((interest) => (
                 <Chip key={interest}>{interest}</Chip>
@@ -138,20 +109,20 @@ export function MatchCard({
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-        {match.email && (
-          <Button asChild size="sm" className="rounded-full">
-            <a href={`mailto:${match.email}`}>
-              <Send aria-hidden className="size-3.5" />
-              Connect with her
+      <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+        {match.linkedin && (
+          <Button asChild variant="secondary" className="w-full rounded-full">
+            <a href={linkedinHref(match.linkedin)} target="_blank" rel="noreferrer noopener">
+              <Linkedin aria-hidden className="size-3.5" />
+              LinkedIn Profile
             </a>
           </Button>
         )}
-        {match.linkedin && (
-          <Button asChild size="sm" variant="outline" className="rounded-full">
-            <a href={linkedinHref(match.linkedin)} target="_blank" rel="noreferrer noopener">
-              <Linkedin aria-hidden className="size-3.5" />
-              LinkedIn
+        {match.email && (
+          <Button asChild className="w-full rounded-full">
+            <a href={`mailto:${match.email}`}>
+              <Send aria-hidden className="size-3.5" />
+              Connect with {firstName}
             </a>
           </Button>
         )}
