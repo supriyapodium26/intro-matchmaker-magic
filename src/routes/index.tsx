@@ -100,6 +100,20 @@ const EMPTY: Answers = {
 
 type Bubble = { role: "bot" | "user"; text: string; id: string };
 
+/** Bot copy can mark a word or phrase bold with **double asterisks**; this is
+ * the only inline formatting bot messages support. */
+function renderWithBold(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={index} className="font-semibold">
+        {part.slice(2, -2)}
+      </strong>
+    ) : (
+      <span key={index}>{part}</span>
+    ),
+  );
+}
+
 function Index() {
   const [sessionKey, setSessionKey] = useState(0);
 
@@ -202,7 +216,7 @@ function IntakeChat() {
     setDemoFirstName(firstName);
     setTyping(false);
     botSay(
-      `Hi ${firstName}! I'm Lam, Podium's curator. You shouldn't have to scroll through hundreds of profiles hoping to recognise yourself in one. We've spent a year learning what makes an introduction land, and it's seldom the work itself. It's the relief of meeting someone weighing the same things you are. Answer a few questions, and I'll show you three people I think you'll enjoy meeting.`,
+      `Hi ${firstName}! I'm Lam, Podium's curator. We've spent a year learning what makes a **connection** land, and it's seldom the work itself. It's the relief of meeting someone weighing the same things you are. Answer a few questions, and I'll show you three people I think you'll enjoy meeting.`,
       () => {
         const icpPrompt = promptFor("icp", EMPTY);
         if (icpPrompt) botSay(icpPrompt.question, () => setDockVisible(true));
@@ -211,6 +225,11 @@ function IntakeChat() {
       350,
     );
   };
+
+  useEffect(() => {
+    void start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const progressTotal =
     (answers.icp ? 1 : 1) + 3 + (answers.icp && BUSINESS_TYPE_ICPS.includes(answers.icp) ? 1 : 0);
@@ -283,7 +302,7 @@ function IntakeChat() {
       say(
         "bot",
         response.matches.length > 0
-          ? `Hey ${demoFirstName}, these are three members I think you should connect with. Each of them shares something with you - where you are right now, or what you're drawn to outside of work. Read through their profiles and reach out to whoever you find yourself in.`
+          ? `Hey ${demoFirstName}, **here** are three members I think you should connect with. Each of them shares something with you - where you are right now, or what you're drawn to outside of work. Read through their profiles and reach out to whoever you find yourself in.`
           : "I couldn't find a compatible match in the current pool right now.",
       );
       setResult(response);
@@ -362,27 +381,6 @@ function IntakeChat() {
 
       <Conversation className="min-h-0 flex-1">
         <ConversationContent className="gap-5 px-0 py-8" aria-live="polite">
-          {!hasStarted ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center duration-500 animate-in fade-in">
-              <img
-                src={podiumLogo.url}
-                alt=""
-                className="mb-7 size-16 rounded-full object-cover shadow-sm"
-              />
-              <p className="max-w-xs font-display text-3xl leading-tight text-foreground">
-                Meet the women in Podium who are where you are
-              </p>
-              <button
-                type="button"
-                onClick={start}
-                className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5 hover:opacity-90 active:translate-y-0"
-              >
-                Start here
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-          ) : null}
-
           {bubbles.map((bubble, index) => {
             if (bubble.role === "bot") {
               const continues = bubbles[index - 1]?.role === "bot";
@@ -403,7 +401,7 @@ function IntakeChat() {
                     />
                   )}
                   <p className="whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-card px-4 py-3 text-sm leading-relaxed text-foreground shadow-sm">
-                    {bubble.text}
+                    {renderWithBold(bubble.text)}
                   </p>
                 </div>
               );

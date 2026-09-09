@@ -1,8 +1,7 @@
 // Pure matching engine: hard-filter cascade + weighted scoring, per the algorithm doc.
 
 import type { IcpKey } from "@/lib/intake-tree";
-import { HOME_COUNTRY, ICP_WARM_PHRASE, LIFE_CONTEXT_TAG_LABELS } from "@/lib/intake-tree";
-import { countryName } from "@/lib/countries";
+import { HOME_COUNTRY } from "@/lib/intake-tree";
 import {
   CHILDFREE_STATUSES,
   COUNTRY_FALLBACK_CAP,
@@ -50,10 +49,10 @@ export type MatchBreakdown = {
   weight: number;
 };
 
-/** One "Why You Two" bullet — the value is kept separate so the client can
- * bold it and pick an icon without generating any text itself. */
-export type ReasonType = "lifeContext" | "interests" | "countries";
-export type MatchReason = { type: ReasonType; prefix: string; value: string; suffix: string };
+/** One shared item between seeker and candidate — the raw tag/interest/country
+ * value only; the client picks the icon and label text. */
+export type SharedTagType = "lifeContext" | "interests" | "countries";
+export type SharedTag = { type: SharedTagType; value: string };
 
 export type Match = {
   candidate: Candidate;
@@ -62,21 +61,11 @@ export type Match = {
   route: "A" | "B";
   filterStep: string;
   breakdown: MatchBreakdown[];
-  headline: string;
-  reasons: MatchReason[];
+  sharedTags: SharedTag[];
   hobbyOnly: boolean;
 };
 
-/** "Entrepreneur" as an area of expertise says nothing meaningful, so we never
- * phrase it as a shared field or a role descriptor. */
-const VAGUE_EXPERTISE = ["entrepreneur", "entrepreneurship", "founder", "business owner"];
-
 type ChildGroup = "parent" | "childfree" | "exploring";
-
-function meaningfulExpertise(value: string | null) {
-  if (!value) return null;
-  return VAGUE_EXPERTISE.includes(value.trim().toLowerCase()) ? null : value;
-}
 
 function jaccard(a: string[], b: string[]) {
   const setA = new Set(a);
@@ -287,89 +276,17 @@ export function scoreCandidate(
     weight: totalWeight === 0 ? 0 : Math.round((table[part.dimension] / totalWeight) * 100),
   }));
 
-  // Reasons are deterministic templates over real overlap data only — never
-  // invented prose. Priority: shared life-context tags first (highest
-  // emotional resonance for an introductions feature), then shared
-  // interests, then shared countries. Expertise is shown as its own chip
-  // already, so it isn't repeated here. Capped at 2 bullets.
-  const sharedLifeContext = life?.shared ?? [];
-  // The headline (clause 3) always claims the first shared tag, so the
-  // bullet picks the next-best remaining one instead of repeating it.
-  const headlineLifeContextTag = sharedLifeContext[0] ?? null;
-  const bulletLifeContextTag =
-    sharedLifeContext.find((tag) => tag !== headlineLifeContextTag) ?? null;
-  const reasonCandidates: MatchReason[] = [];
-  if (bulletLifeContextTag) {
-    const label = LIFE_CONTEXT_TAG_LABELS[bulletLifeContextTag] ?? bulletLifeContextTag;
-    reasonCandidates.push({
-      type: "lifeContext",
-      prefix: "You're both ",
-      value: label,
-      suffix: " — she'll get it without you explaining",
-    });
-  }
-  if (interests !== null && interests.shared.length > 0) {
-    reasonCandidates.push({
-      type: "interests",
-      prefix: "She's into ",
-      value: interests.shared[0]!,
-      suffix: " too",
-    });
-  }
-  if (countries !== null && countries.shared.length > 0) {
-    reasonCandidates.push({
-      type: "countries",
-      prefix: "You've both lived in ",
-      value: countryName(countries.shared[0]!),
-      suffix: "",
-    });
-  }
-  const reasons = reasonCandidates.slice(0, 2);
+  // Shared tags are real overlap data only — no generated prose. Priority
+  // order: shared life-context tags first (highest emotional resonance for
+  // an introductions feature), then shared interests, then shared countries.
+  // Every shared item is included (not just the top one per category).
+  const sharedTags: SharedTag[] = [
+    ...(life?.shared ?? []).map((value): SharedTag => ({ type: "lifeContext", value })),
+    ...(interests?.shared ?? []).map((value): SharedTag => ({ type: "interests", value })),
+    ...(countries?.shared ?? []).map((value): SharedTag => ({ type: "countries", value })),
+  ];
 
-  return { score, breakdown, reasons, headline: headlineFor(seeker, candidate, sharedLifeContext) };
-}
-
-function listOf(items: string[]) {
-  if (items.length <= 1) return items[0] ?? "";
-  const final = items.at(-1) ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${final}`;
-}
-
-/** One warm sentence introducing the match, e.g. "Jovita leads at director
- * level in Consulting, is close to your age, is also a working mom, and is
- * also at a career crossroads too." */
-function headlineFor(seeker: Seeker, candidate: Candidate, sharedLifeContext: string[]) {
-  const first = candidate.name.trim().split(/\s+/)[0] ?? "She";
-  const bits: string[] = [];
-  const role = roleDescriptor(candidate.roleLabel, meaningfulExpertise(candidate.expertise));
-  if (role) bits.push(role);
-  if (seeker.age !== null && candidate.age !== null) {
-    const gap = Math.abs(seeker.age - candidate.age);
-    if (gap <= 2) bits.push("is right around your age");
-    else if (gap <= 5) bits.push("is close to your age");
-  }
-  if (sharedLifeContext.length > 0) {
-    const topTag = sharedLifeContext[0]!;
-    bits.push(`is also ${LIFE_CONTEXT_TAG_LABELS[topTag] ?? topTag}`);
-  }
-  bits.push(`is ${ICP_WARM_PHRASE[candidate.icp]}`);
-  return `${first} ${listOf(bits)}.`;
-}
-
-/** Reads naturally in a sentence: "Jovita is a manager in Consulting, ...". */
-function roleDescriptor(roleLabel: string | null, expertise: string | null) {
-  const field = expertise ? ` in ${expertise}` : "";
-  if (!roleLabel) return expertise ? `works in ${expertise}` : "";
-  const role = roleLabel.toLowerCase();
-  if (role.includes("founder")) return `runs her own business${field}`;
-  if (role.includes("c-suite")) return `sits in the C-suite${field}`;
-  if (role.includes("between roles"))
-    return expertise ? `is between roles with a background in ${expertise}` : "is between roles right now";
-  if (role.includes("director") || role.includes("vp")) return `leads at director level${field}`;
-  if (role.includes("individual contributor")) {
-    return `is ${role.startsWith("senior") ? "a senior specialist" : "a specialist"}${field}`;
-  }
-  return `is a ${role}${field}`;
+  return { score, breakdown, sharedTags };
 }
 
 function rank(
@@ -381,7 +298,7 @@ function rank(
   const { survivors, stepLabel, hobbyOnly } = applyHardFilters(seeker, pool);
   return survivors
     .map((candidate) => {
-      const { score, breakdown, reasons, headline } = scoreCandidate(seeker, candidate, {
+      const { score, breakdown, sharedTags } = scoreCandidate(seeker, candidate, {
         hobbyOnly,
         collectsBusinessType,
       });
@@ -392,8 +309,7 @@ function rank(
         route: candidate.route,
         filterStep: stepLabel,
         breakdown,
-        headline,
-        reasons,
+        sharedTags,
         hobbyOnly,
       } satisfies Match;
     })
@@ -475,7 +391,7 @@ export function findWildcards(
 
   return wildcardPool
     .map((candidate) => {
-      const { score, breakdown, reasons, headline } = scoreCandidate(seeker, candidate, {
+      const { score, breakdown, sharedTags } = scoreCandidate(seeker, candidate, {
         hobbyOnly: true,
         collectsBusinessType: false,
       });
@@ -486,12 +402,11 @@ export function findWildcards(
         route: candidate.route,
         filterStep: "Interesting profiles (shared interests and life context)",
         breakdown,
-        headline,
-        reasons,
+        sharedTags,
         hobbyOnly: true,
       } satisfies Match;
     })
-    .filter((match) => match.reasons.length > 0)
+    .filter((match) => match.sharedTags.length > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

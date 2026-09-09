@@ -8,7 +8,7 @@ import {
   identityKey,
   type Candidate,
   type Match,
-  type MatchReason,
+  type SharedTag,
   type Seeker,
 } from "@/lib/matching/engine";
 
@@ -64,8 +64,7 @@ export type PublicMatch = {
   interests: string[];
   email: string | null;
   linkedin: string | null;
-  headline: string;
-  reasons: MatchReason[];
+  sharedTags: SharedTag[];
   breakdown: { label: string; score: number; weight: number }[];
 };
 
@@ -596,8 +595,7 @@ export async function handleSubmitIntake(data: Payload) {
     interests: match.candidate.interests,
     email: match.candidate.email,
     linkedin: match.candidate.linkedin,
-    headline: match.headline,
-    reasons: match.reasons,
+    sharedTags: match.sharedTags,
     breakdown: match.breakdown.map((part) => ({
       label: part.label,
       score: part.score,
