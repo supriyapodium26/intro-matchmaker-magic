@@ -216,7 +216,7 @@ function IntakeChat() {
     setDemoFirstName(firstName);
     setTyping(false);
     botSay(
-      `Hi ${firstName}! I'm Lam, Podium's curator. We've spent a year learning what makes a **connection** land, and it's seldom the work itself. It's the relief of meeting someone weighing the same things you are. Answer a few questions, and I'll show you three people I think you'll enjoy meeting.`,
+      `Hi ${firstName}! I'm Lam, Podium's curator. We've spent a year learning what makes a connection land, and it's seldom the work itself. It's the relief of meeting someone weighing the same things you are. Answer a few questions, and I'll show you three people I think you'll enjoy meeting.`,
       () => {
         const icpPrompt = promptFor("icp", EMPTY);
         if (icpPrompt) botSay(icpPrompt.question, () => setDockVisible(true));
