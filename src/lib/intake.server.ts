@@ -556,6 +556,7 @@ export async function handleSubmitIntake(data: Payload) {
     expertise: profile.expertise,
     countries: profile.countries,
     lifeContext: [...new Set([...profile.lifeContext, ...data.lifeContext])],
+    onboardingLifeContext: profile.lifeContext,
     interests: profile.interests,
     stageIndex: data.stageIndex,
     stageLabel: data.stageLabel,

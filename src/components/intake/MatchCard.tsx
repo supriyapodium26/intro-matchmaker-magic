@@ -1,9 +1,8 @@
-import { Check, Linkedin, MapPin, Send, Sparkles, Users } from "lucide-react";
+import { Check, Linkedin, Send } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { countryName } from "@/lib/countries";
-import { HOME_COUNTRY, LIFE_CONTEXT_CHIP_LABELS } from "@/lib/intake-tree";
+import { LIFE_CONTEXT_CHIP_LABELS } from "@/lib/intake-tree";
 import type { PublicMatch } from "@/lib/intake.functions";
 
 const VAGUE_EXPERTISE = ["entrepreneur", "entrepreneurship", "founder", "business owner"];
@@ -39,17 +38,9 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** One consistent icon per shared-tag type across every card. */
-function TagIcon({ type }: { type: PublicMatch["sharedTags"][number]["type"] }) {
-  const className = "size-3.5 shrink-0";
-  if (type === "lifeContext") return <Users aria-hidden className={className} />;
-  if (type === "interests") return <Sparkles aria-hidden className={className} />;
-  return <MapPin aria-hidden className={className} />;
-}
-
-function sharedTagLabel(tag: PublicMatch["sharedTags"][number]) {
+function sharedTagLabel(tag: PublicMatch["sharedTags"][number], stageLabel: string | null) {
+  if (tag.type === "stage") return stageLabel ?? tag.value;
   if (tag.type === "lifeContext") return LIFE_CONTEXT_CHIP_LABELS[tag.value] ?? tag.value;
-  if (tag.type === "countries") return countryName(tag.value);
   return tag.value;
 }
 
@@ -64,7 +55,6 @@ export function MatchCard({
   tier?: "primary" | "loose" | "wildcard";
   expanded?: boolean;
 }) {
-  const countries = match.countries.filter((code) => code !== HOME_COUNTRY);
   const expertise = expertiseLabel(match.expertise);
   const firstName = match.displayName.split(" ")[0] ?? match.displayName;
   const [connected, setConnected] = useState(false);
@@ -75,16 +65,12 @@ export function MatchCard({
   const sharedInterests = new Set(
     match.sharedTags.filter((tag) => tag.type === "interests").map((tag) => tag.value),
   );
-  const sharedCountries = new Set(
-    match.sharedTags.filter((tag) => tag.type === "countries").map((tag) => tag.value),
-  );
   const otherLifeContext = match.lifeContext
     .filter((tag) => !sharedLifeContext.has(tag))
     .slice(0, 4);
   const otherInterests = match.interests
     .filter((interest) => !sharedInterests.has(interest))
-    .slice(0, 5);
-  const otherCountries = countries.filter((code) => !sharedCountries.has(code)).slice(0, 3);
+    .slice(0, Math.max(0, 5 - sharedInterests.size));
 
   if (!expanded) {
     return (
@@ -116,10 +102,9 @@ export function MatchCard({
             {match.sharedTags.map((tag, index) => (
               <span
                 key={`${tag.type}-${index}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-foreground"
+                className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-foreground"
               >
-                <TagIcon type={tag.type} />
-                {sharedTagLabel(tag)}
+                {sharedTagLabel(tag, match.stageLabel)}
               </span>
             ))}
           </div>
@@ -148,15 +133,6 @@ export function MatchCard({
             <div className="flex flex-wrap gap-1.5">
               {otherInterests.map((interest) => (
                 <Chip key={interest}>{interest}</Chip>
-              ))}
-            </div>
-          </FieldRow>
-        )}
-        {otherCountries.length > 0 && (
-          <FieldRow label="Countries lived">
-            <div className="flex flex-wrap gap-1.5">
-              {otherCountries.map((code) => (
-                <Chip key={code}>Lived in {countryName(code)}</Chip>
               ))}
             </div>
           </FieldRow>

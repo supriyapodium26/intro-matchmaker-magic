@@ -40,7 +40,12 @@ export type Candidate = {
   linkedin: string | null;
 };
 
-export type Seeker = Omit<Candidate, "id" | "name" | "route" | "email" | "phone" | "linkedin">;
+export type Seeker = Omit<Candidate, "id" | "name" | "route" | "email" | "phone" | "linkedin"> & {
+  /** Onboarding-only life context (no bot Step 4 answer mixed in) — used for
+   * the "Other Parts of Her" shared-tag/display calculation only. Scoring
+   * still uses the merged `lifeContext` field above. */
+  onboardingLifeContext: string[];
+};
 
 export type MatchBreakdown = {
   dimension: Dimension;
@@ -49,9 +54,10 @@ export type MatchBreakdown = {
   weight: number;
 };
 
-/** One shared item between seeker and candidate — the raw tag/interest/country
- * value only; the client picks the icon and label text. */
-export type SharedTagType = "lifeContext" | "interests" | "countries";
+/** One shared item between seeker and candidate — the raw tag/interest
+ * value only; the client picks the icon and label text. Countries are
+ * scored but never shown as a shared tag. */
+export type SharedTagType = "stage" | "lifeContext" | "interests";
 export type SharedTag = { type: SharedTagType; value: string };
 
 export type Match = {
@@ -276,14 +282,18 @@ export function scoreCandidate(
     weight: totalWeight === 0 ? 0 : Math.round((table[part.dimension] / totalWeight) * 100),
   }));
 
-  // Shared tags are real overlap data only — no generated prose. Priority
-  // order: shared life-context tags first (highest emotional resonance for
-  // an introductions feature), then shared interests, then shared countries.
-  // Every shared item is included (not just the top one per category).
+  // Shared tags are real overlap data only — no generated prose, and drawn
+  // only from the card's three onboarding sections (life-context Jaccard and
+  // countries are scoring-only signals, never shown as shared tags). Priority
+  // order matches the card: what she's navigating (same ICP, a hard filter
+  // that never loosens outside hobby-only mode) first, then shared
+  // onboarding life-context, then shared interests. Every shared item is
+  // included (not just the top one per category).
+  const onboardingLife = jaccard(seeker.onboardingLifeContext, candidate.lifeContext);
   const sharedTags: SharedTag[] = [
-    ...(life?.shared ?? []).map((value): SharedTag => ({ type: "lifeContext", value })),
+    ...(seeker.icp === candidate.icp ? [{ type: "stage", value: candidate.icp } as SharedTag] : []),
+    ...(onboardingLife?.shared ?? []).map((value): SharedTag => ({ type: "lifeContext", value })),
     ...(interests?.shared ?? []).map((value): SharedTag => ({ type: "interests", value })),
-    ...(countries?.shared ?? []).map((value): SharedTag => ({ type: "countries", value })),
   ];
 
   return { score, breakdown, sharedTags };

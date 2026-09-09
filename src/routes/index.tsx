@@ -302,7 +302,7 @@ function IntakeChat() {
       say(
         "bot",
         response.matches.length > 0
-          ? `Hey ${demoFirstName}, **here** are three members I think you should connect with. Each of them shares something with you - where you are right now, or what you're drawn to outside of work. Read through their profiles and reach out to whoever you find yourself in.`
+          ? `Hey ${demoFirstName}, here are three members I think you should connect with. Each of them shares something with you - where you are right now, or what you're drawn to outside of work. Read through their profiles and reach out to whoever you find yourself in.`
           : "I couldn't find a compatible match in the current pool right now.",
       );
       setResult(response);
